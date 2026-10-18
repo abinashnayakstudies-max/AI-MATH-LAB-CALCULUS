@@ -332,8 +332,22 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
+     
       const data = await response.json();
-      setCalculusResult(data);
+
+if (!response.ok) {
+  setCalculusResult({
+    error: typeof data.detail === "string"
+      ? data.detail
+      : `Request failed with status ${response.status}`
+  });
+} else if (data.error || !data.operation || !data.result) {
+  setCalculusResult({
+    error: data.error || "The backend returned an unexpected response. Please try again."
+  });
+} else {
+  setCalculusResult(data);
+}
     } catch {
       setCalculusResult({ error: "Could not connect to the calculus API. Make sure the backend has been redeployed." });
     } finally {
