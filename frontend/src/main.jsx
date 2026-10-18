@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import "./style.css";
 
-const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab1.onrender.com").replace(/\/$/, "");
+const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
 
 function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
   const mountRef = useRef(null);
@@ -332,22 +332,25 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-     
-      const data = await response.json();
-
-if (!response.ok) {
-  setCalculusResult({
-    error: typeof data.detail === "string"
-      ? data.detail
-      : `Request failed with status ${response.status}`
-  });
-} else if (data.error || !data.operation || !data.result) {
-  setCalculusResult({
-    error: data.error || "The backend returned an unexpected response. Please try again."
-  });
-} else {
-  setCalculusResult(data);
-}
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setCalculusResult({ error: data.detail || data.error || `Request failed (${response.status}).` });
+      } else if (data.error) {
+        setCalculusResult({ error: String(data.error) });
+      } else if (!data || typeof data !== "object" || data.result == null) {
+        setCalculusResult({ error: "The calculus API returned an unexpected response. Please try again." });
+      } else {
+        setCalculusResult({
+          ...data,
+          operation: typeof data.operation === "string" ? data.operation : calculusOperation,
+          expression: data.expression ?? calculusExpression,
+          result: String(data.result),
+          latex: data.latex == null ? String(data.result) : String(data.latex),
+          derivative: data.derivative == null ? "" : String(data.derivative),
+          plot_points: Array.isArray(data.plot_points) ? data.plot_points : [],
+          derivative_plot_points: Array.isArray(data.derivative_plot_points) ? data.derivative_plot_points : []
+        });
+      }
     } catch {
       setCalculusResult({ error: "Could not connect to the calculus API. Make sure the backend has been redeployed." });
     } finally {
@@ -430,11 +433,11 @@ if (!response.ok) {
       <div className="calculus-body">
         <div className="calculus-answer">
           {!calculusResult ? <div className="result-empty">Enter a function and choose an operation to begin.</div> : calculusResult.error ? <div className="error">{calculusResult.error}</div> : <>
-            <span className="answer-label">{calculusResult.operation.toUpperCase()}</span>
-            <div className="answer-expression">{calculusResult.result}{calculusResult.integration_constant_note ? " + C" : ""}</div>
-            <div className="answer-source">Input: f(x) = {calculusResult.expression}</div>
-            {calculusOperation === "differentiate" && <div className="answer-source">First derivative: f′(x) = {calculusResult.derivative}</div>}
-            <div className="answer-latex">LaTeX: {calculusResult.latex}{calculusResult.integration_constant_note ? " + C" : ""}</div>
+            <span className="answer-label">{String(calculusResult.operation || calculusOperation).toUpperCase()}</span>
+            <div className="answer-expression">{String(calculusResult.result ?? "No result returned")}{calculusResult.integration_constant_note ? " + C" : ""}</div>
+            <div className="answer-source">Input: f(x) = {String(calculusResult.expression ?? calculusExpression)}</div>
+            {calculusOperation === "differentiate" && calculusResult.derivative && <div className="answer-source">First derivative: f′(x) = {String(calculusResult.derivative)}</div>}
+            <div className="answer-latex">LaTeX: {String(calculusResult.latex ?? calculusResult.result ?? "")}{calculusResult.integration_constant_note ? " + C" : ""}</div>
           </>}
         </div>
         <div className="calculus-visual"><div className="calculus-visual-head"><span>FUNCTION PREVIEW</span><small><i className="original-dot"/> f(x) <i className="derivative-dot"/> f′(x)</small></div><CalculusMiniPlot points={calculusResult?.plot_points} derivativePoints={calculusResult?.derivative_plot_points}/></div>
