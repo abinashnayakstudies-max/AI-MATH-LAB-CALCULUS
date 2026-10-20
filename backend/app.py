@@ -317,6 +317,129 @@ def calculate_calculus(req: CalculusRequest):
         }
     except Exception as e:
         return {"error": f"Could not process expression: {str(e) or 'invalid expression'}"}
+# ==========================================
+# LIMITS & CONTINUITY — AI MATH LAB
+# ==========================================
+
+class LimitRequest(BaseModel):
+    expression: str = Field(..., min_length=1, max_length=200)
+    point: str = Field(default="0", max_length=30)
+    operation: str = "limit"
+    direction: str = "both"
+
+
+def parse_limit_point(point: str):
+    """Safely parse a finite number or positive/negative infinity."""
+    point = point.strip().lower()
+
+    if point in {"oo", "+oo", "inf", "+inf", "infinity", "+infinity"}:
+        return sp.oo
+
+    if point in {"-oo", "-inf", "-infinity"}:
+        return -sp.oo
+
+    value = float(point)
+
+    if not np.isfinite(value) or abs(value) > 1_000_000:
+        raise ValueError("Enter a finite point within ±1,000,000 or use oo/-oo.")
+
+    return sp.Float(value)
+
+
+@app.post("/limits")
+def calculate_limits(req: LimitRequest):
+    try:
+        expr = parse_math_expression(req.expression)
+        point = parse_limit_point(req.point)
+
+        if req.operation not in {"limit", "continuity"}:
+            return {
+                "error": "Unsupported operation. Choose limit or continuity."
+            }
+
+        if req.direction not in {"both", "left", "right"}:
+            return {
+                "error": "Direction must be both, left, or right."
+            }
+
+        if req.operation == "continuity" and point in {sp.oo, -sp.oo}:
+            return {
+                "error": "Continuity must be checked at a finite point."
+            }
+
+        # Calculate the left-hand, right-hand and two-sided limits.
+        if point in {sp.oo, -sp.oo}:
+            limit_value = sp.limit(expr, x, point)
+
+            return {
+                "success": True,
+                "operation": "Limit at infinity",
+                "expression": str(expr),
+                "point": str(point),
+                "result": str(limit_value),
+                "latex": sp.latex(limit_value),
+                "direction": "both"
+            }
+
+        left_limit = sp.limit(expr, x, point, dir="-")
+        right_limit = sp.limit(expr, x, point, dir="+")
+
+        function_value = sp.simplify(expr.subs(x, point))
+
+        if req.operation == "limit":
+            if req.direction == "left":
+                result = left_limit
+            elif req.direction == "right":
+                result = right_limit
+            else:
+                if sp.simplify(left_limit - right_limit) == 0:
+                    result = left_limit
+                else:
+                    result = sp.Limit(expr, x, point)
+
+            return {
+                "success": True,
+                "operation": "Limit",
+                "expression": str(expr),
+                "point": str(point),
+                "direction": req.direction,
+                "left_limit": str(left_limit),
+                "right_limit": str(right_limit),
+                "result": str(result),
+                "latex": sp.latex(result)
+            }
+
+        # Continuity requires both one-sided limits and f(point)
+        # to exist and have the same finite value.
+        continuous = (
+            left_limit.is_finite is True
+            and right_limit.is_finite is True
+            and function_value.is_finite is True
+            and sp.simplify(left_limit - right_limit) == 0
+            and sp.simplify(left_limit - function_value) == 0
+        )
+
+        return {
+            "success": True,
+            "operation": "Continuity Check",
+            "expression": str(expr),
+            "point": str(point),
+            "left_limit": str(left_limit),
+            "right_limit": str(right_limit),
+            "function_value": str(function_value),
+            "continuous": bool(continuous),
+            "result": (
+                f"Continuous at x = {point}"
+                if continuous
+                else f"Not continuous at x = {point}"
+            )
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Could not calculate the limit: "
+                     f"{str(e) or 'invalid input'}"
+        }
 
 
 if __name__ == "__main__":
