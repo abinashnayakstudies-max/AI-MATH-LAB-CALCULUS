@@ -299,6 +299,14 @@ function App() {
   const [calculusResult, setCalculusResult] = useState(null);
   const [calculusLoading, setCalculusLoading] = useState(false);
 
+  // Limits & Continuity state
+  const [limitExpression, setLimitExpression] = useState("sin(x)/x");
+  const [limitPoint, setLimitPoint] = useState("0");
+  const [limitOperation, setLimitOperation] = useState("limit");
+  const [limitDirection, setLimitDirection] = useState("both");
+  const [limitResult, setLimitResult] = useState(null);
+  const [limitLoading, setLimitLoading] = useState(false);
+
   async function calculate() {
     setLoading(true); setResult(null); setValueResult(null);
     try {
@@ -358,6 +366,35 @@ function App() {
     }
   }
 
+  async function calculateLimit() {
+    setLimitLoading(true);
+    setLimitResult(null);
+
+    try {
+      const response = await fetch(`${API}/limits`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expression: limitExpression,
+          point: limitPoint,
+          operation: limitOperation,
+          direction: limitDirection
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.error || data.detail) {
+        setLimitResult({ error: data.detail || data.error || `Request failed (${response.status}).` });
+      } else {
+        setLimitResult(data);
+      }
+    } catch {
+      setLimitResult({ error: "Could not connect to the limits API. Please try again after the backend is available." });
+    } finally {
+      setLimitLoading(false);
+    }
+  }
+
   const numerical = result?.canonical_c;
   const ml = result?.ml_c;
   const hybrid = result?.hybrid_c;
@@ -370,7 +407,7 @@ function App() {
   return <main className="app">
     <header className="topbar">
       <div className="brand-mark"><FlaskConical size={20}/><div><strong>AI Math Lab</strong><span>Computational Mathematics & Engineering</span></div></div>
-      <nav><a className="active" href="#mvt-workspace">MVT Explorer</a><a href="#calculus-engine" onClick={() => setTimeout(() => document.getElementById("calculus-engine")?.scrollIntoView({ behavior: "smooth" }), 0)}>Calculus Engine</a><a href="#calculus-engine">Taylor (planned)</a><a href="#calculus-engine">Signals (planned)</a></nav>
+      <nav><a className="active" href="#mvt-workspace">MVT Explorer</a><a href="#calculus-engine">Calculus Engine</a><a href="#limits-continuity">Limits</a><a href="#calculus-engine">Taylor (planned)</a><a href="#calculus-engine">Signals (planned)</a></nav>
       <div className="status"><i/> API ONLINE</div>
     </header>
 
@@ -443,6 +480,81 @@ function App() {
         <div className="calculus-visual"><div className="calculus-visual-head"><span>FUNCTION PREVIEW</span><small><i className="original-dot"/> f(x) <i className="derivative-dot"/> f′(x)</small></div><CalculusMiniPlot points={calculusResult?.plot_points} derivativePoints={calculusResult?.derivative_plot_points}/></div>
       </div>
       <p className="calculus-help">Supported syntax: x, pi, e, +, −, *, /, ^ or **, parentheses, sin, cos, tan, exp, log, sqrt, sinh and cosh. Indefinite integrals include the constant of integration C.</p>
+    </section>
+
+    <section className="calculus-engine panel limits-module" id="limits-continuity">
+      <div className="calculus-heading">
+        <div>
+          <span>06 / CALCULUS MODULE</span>
+          <h2>Limits &amp; Continuity</h2>
+          <p>Explore two-sided and one-sided limits, behaviour at infinity, and continuity.</p>
+        </div>
+        <div className="calculus-badge">SYMPY · LIMIT ANALYSIS</div>
+      </div>
+
+      <div className="calculus-controls">
+        <div className="calculus-field expression-field">
+          <label>FUNCTION f(x)</label>
+          <input value={limitExpression} onChange={e => setLimitExpression(e.target.value)} placeholder="sin(x)/x" />
+        </div>
+        <div className="calculus-field">
+          <label>OPERATION</label>
+          <select value={limitOperation} onChange={e => setLimitOperation(e.target.value)}>
+            <option value="limit">Calculate limit</option>
+            <option value="continuity">Check continuity</option>
+          </select>
+        </div>
+        <div className="calculus-field limit-field">
+          <label>POINT x →</label>
+          <input value={limitPoint} onChange={e => setLimitPoint(e.target.value)} placeholder="0, 2, oo, -oo" />
+        </div>
+        {limitOperation === "limit" && <div className="calculus-field">
+          <label>DIRECTION</label>
+          <select value={limitDirection} onChange={e => setLimitDirection(e.target.value)}>
+            <option value="both">Two-sided</option>
+            <option value="left">Left-hand</option>
+            <option value="right">Right-hand</option>
+          </select>
+        </div>}
+        <button className="primary-button calculus-run" onClick={calculateLimit} disabled={limitLoading}>
+          <Play size={15}/>{limitLoading ? "Calculating…" : "Calculate"}
+        </button>
+      </div>
+
+      <div className="calculus-body">
+        <div className="calculus-answer">
+          {!limitResult ? <div className="result-empty">Enter a function and choose an operation to begin.<br/><br/>Example: sin(x)/x as x approaches 0.</div> : limitResult.error ? <div className="error">{limitResult.error}</div> : <>
+            <span className="answer-label">{String(limitResult.operation || limitOperation).toUpperCase()}</span>
+            <div className="answer-expression">{String(limitResult.result ?? "No result returned")}</div>
+            <div className="answer-source">Input: f(x) = {String(limitResult.expression ?? limitExpression)}</div>
+            <div className="answer-source">Point: x → {String(limitResult.point ?? limitPoint)}</div>
+            {limitResult.left_limit != null && <div className="answer-source">Left-hand limit: {String(limitResult.left_limit)}</div>}
+            {limitResult.right_limit != null && <div className="answer-source">Right-hand limit: {String(limitResult.right_limit)}</div>}
+            {limitResult.function_value != null && <div className="answer-source">f(point): {String(limitResult.function_value)}</div>}
+            {limitResult.continuous != null && <div className="answer-source">Continuity: {limitResult.continuous ? "Continuous" : "Not continuous"}</div>}
+            {limitResult.latex && <div className="answer-latex">Symbolic form: {String(limitResult.latex)}</div>}
+          </>}
+        </div>
+
+        <div className="calculus-visual">
+          <div className="calculus-visual-head"><span>QUICK EXAMPLES</span></div>
+          <div className="limit-examples">
+            <button type="button" onClick={() => { setLimitExpression("sin(x)/x"); setLimitPoint("0"); setLimitOperation("limit"); setLimitDirection("both"); setLimitResult(null); }}>
+              <strong>sin(x)/x</strong><span>x → 0</span>
+            </button>
+            <button type="button" onClick={() => { setLimitExpression("x^2"); setLimitPoint("2"); setLimitOperation("continuity"); setLimitResult(null); }}>
+              <strong>x²</strong><span>Continuity at 2</span>
+            </button>
+            <button type="button" onClick={() => { setLimitExpression("abs(x)/x"); setLimitPoint("0"); setLimitOperation("limit"); setLimitDirection("left"); setLimitResult(null); }}>
+              <strong>|x|/x</strong><span>Left-hand limit at 0</span>
+            </button>
+            <button type="button" onClick={() => { setLimitExpression("1/x"); setLimitPoint("oo"); setLimitOperation("limit"); setLimitDirection("both"); setLimitResult(null); }}>
+              <strong>1/x</strong><span>x → ∞</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p className="calculus-help">Use oo for positive infinity and -oo for negative infinity. Enter expressions using the supported mathematical syntax.</p>
     </section>
 
     <section className="method-grid">
