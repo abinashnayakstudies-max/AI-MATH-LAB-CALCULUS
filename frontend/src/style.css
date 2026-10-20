@@ -44,3 +44,46 @@
 .calculus-help { margin:14px 2px 0; color:var(--muted, #8fa6bc); font-size:11px; line-height:1.7; }
 @media (max-width: 900px) { .calculus-body { grid-template-columns:1fr; } .calculus-heading { flex-direction:column; } }
 @media (max-width: 560px) { .calculus-engine { padding:15px; } .calculus-controls { padding:12px; } .calculus-field, .calculus-field.expression-field { flex:1 1 100%; min-width:0; } .calculus-run { width:100%; justify-content:center; } .calculus-visual-head { align-items:flex-start; flex-direction:column; } }
+/* Limits & Continuity module */
+.limit-examples {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.limit-examples button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 15px;
+  text-align: left;
+  border: 1px solid #263b48;
+  border-radius: 8px;
+  background: #09141d;
+  color: #dce7f1;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.limit-examples button:hover {
+  border-color: #73b8e6;
+  background: #102332;
+}
+
+.limit-examples button strong {
+  font-size: 13px;
+  font-family: Consolas, monospace;
+}
+
+.limit-examples button span {
+  color: #8ba2b3;
+  font-size: 11px;
+}
+
+@media (max-width: 500px) {
+  .limit-examples {
+    grid-template-columns: 1fr;
+  }
+}
