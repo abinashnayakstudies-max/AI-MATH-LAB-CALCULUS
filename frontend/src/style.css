@@ -87,3 +87,78 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Applications of Differentiation: Critical Points & Local Extrema */
+#critical-points {
+  scroll-margin-top: 20px;
+}
+.critical-point-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.critical-point-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 13px;
+  border: 1px solid #2b5144;
+  border-radius: 8px;
+  background: rgba(11, 29, 25, .72);
+  min-width: 0;
+}
+.critical-point-card strong {
+  color: #a5d8bb;
+  font: 700 13px Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.critical-point-card span,
+.critical-point-card small {
+  color: #91a8b8;
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.critical-point-card .critical-point-kind {
+  color: #e1c77e;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.critical-raw-response {
+  margin-top: 14px;
+  border-top: 1px solid #263844;
+  padding-top: 12px;
+  color: #8fa6bc;
+  font-size: 11px;
+}
+.critical-raw-response summary {
+  cursor: pointer;
+  color: #9dd5fa;
+  font-weight: 700;
+}
+.critical-raw-response pre {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  margin-top: 10px;
+  border: 1px solid #263b48;
+  border-radius: 6px;
+  background: #07111a;
+  color: #b7c8d8;
+  font: 10px/1.6 Consolas, monospace;
+}
+#critical-points .limit-examples {
+  margin-top: 14px;
+}
+#critical-points .calculus-help {
+  margin-top: 14px;
+}
+@media (max-width: 560px) {
+  .critical-point-card {
+    padding: 10px;
+  }
+}
