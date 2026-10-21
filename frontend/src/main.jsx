@@ -307,6 +307,13 @@ function App() {
   const [limitResult, setLimitResult] = useState(null);
   const [limitLoading, setLimitLoading] = useState(false);
 
+  // Applications of Differentiation: critical points
+  const [criticalExpression, setCriticalExpression] = useState("x^3 - 3*x");
+  const [criticalA, setCriticalA] = useState("-2");
+  const [criticalB, setCriticalB] = useState("2");
+  const [criticalResult, setCriticalResult] = useState(null);
+  const [criticalLoading, setCriticalLoading] = useState(false);
+
   async function calculate() {
     setLoading(true); setResult(null); setValueResult(null);
     try {
@@ -395,6 +402,39 @@ function App() {
     }
   }
 
+  async function calculateCriticalPoints() {
+    setCriticalLoading(true);
+    setCriticalResult(null);
+
+    const lower = Number(criticalA);
+    const upper = Number(criticalB);
+    if (!criticalExpression.trim() || !Number.isFinite(lower) || !Number.isFinite(upper) || lower >= upper) {
+      setCriticalResult({ error: "Enter a valid function and an interval where the lower bound is less than the upper bound." });
+      setCriticalLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API}/critical-points`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expression: criticalExpression, a: lower, b: upper })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setCriticalResult({ error: data.detail || data.error || `Request failed (${response.status}).` });
+      } else if (data.error || data.detail) {
+        setCriticalResult({ error: data.error || data.detail });
+      } else {
+        setCriticalResult(data);
+      }
+    } catch {
+      setCriticalResult({ error: "Could not connect to the critical-points API. Check that the backend is deployed and available." });
+    } finally {
+      setCriticalLoading(false);
+    }
+  }
+
   const numerical = result?.canonical_c;
   const ml = result?.ml_c;
   const hybrid = result?.hybrid_c;
@@ -407,7 +447,7 @@ function App() {
   return <main className="app">
     <header className="topbar">
       <div className="brand-mark"><FlaskConical size={20}/><div><strong>AI Math Lab</strong><span>Computational Mathematics & Engineering</span></div></div>
-      <nav><a className="active" href="#mvt-workspace">MVT Explorer</a><a href="#calculus-engine">Calculus Engine</a><a href="#limits-continuity">Limits</a><a href="#calculus-engine">Taylor (planned)</a><a href="#calculus-engine">Signals (planned)</a></nav>
+      <nav><a className="active" href="#mvt-workspace">MVT Explorer</a><a href="#calculus-engine">Calculus Engine</a><a href="#limits-continuity">Limits</a><a href="#critical-points">Critical Points</a><a href="#calculus-engine">Taylor (planned)</a><a href="#calculus-engine">Signals (planned)</a></nav>
       <div className="status"><i/> API ONLINE</div>
     </header>
 
@@ -555,6 +595,99 @@ function App() {
         </div>
       </div>
       <p className="calculus-help">Use oo for positive infinity and -oo for negative infinity. Enter expressions using the supported mathematical syntax.</p>
+    </section>
+
+    <section className="calculus-engine panel limits-module" id="critical-points">
+      <div className="calculus-heading">
+        <div>
+          <span>07 / APPLICATIONS OF DIFFERENTIATION</span>
+          <h2>Critical Points &amp; Local Extrema</h2>
+          <p>Find stationary points of a function over a chosen interval and inspect the returned classifications.</p>
+        </div>
+        <div className="calculus-badge">DERIVATIVE ANALYSIS</div>
+      </div>
+
+      <div className="calculus-controls">
+        <div className="calculus-field expression-field">
+          <label>FUNCTION f(x)</label>
+          <input value={criticalExpression} onChange={e => setCriticalExpression(e.target.value)} placeholder="x^3 - 3*x" />
+        </div>
+        <div className="calculus-field limit-field">
+          <label>LOWER BOUND</label>
+          <input type="number" value={criticalA} onChange={e => setCriticalA(e.target.value)} />
+        </div>
+        <div className="calculus-field limit-field">
+          <label>UPPER BOUND</label>
+          <input type="number" value={criticalB} onChange={e => setCriticalB(e.target.value)} />
+        </div>
+        <button className="primary-button calculus-run" onClick={calculateCriticalPoints} disabled={criticalLoading}>
+          <Play size={15}/>{criticalLoading ? "Analyzing…" : "Find Critical Points"}
+        </button>
+      </div>
+
+      <div className="calculus-body">
+        <div className="calculus-answer">
+          {!criticalResult ? (
+            <div className="result-empty">Enter a function and interval, then find its critical points.<br/><br/>Example: x³ − 3x on [−2, 2].</div>
+          ) : criticalResult.error ? (
+            <div className="error">{String(criticalResult.error)}</div>
+          ) : (
+            <>
+              <span className="answer-label">ANALYSIS RESULT</span>
+              <div className="answer-source">Function: f(x) = {criticalExpression}</div>
+              <div className="answer-source">Interval: [{criticalA}, {criticalB}]</div>
+              {criticalResult.derivative != null && <div className="answer-source">First derivative: f′(x) = {String(criticalResult.derivative)}</div>}
+              {criticalResult.second_derivative != null && <div className="answer-source">Second derivative: f″(x) = {String(criticalResult.second_derivative)}</div>}
+              {criticalResult.message != null && <div className="answer-source">{String(criticalResult.message)}</div>}
+              {criticalResult.summary != null && <div className="answer-source">{String(criticalResult.summary)}</div>}
+              {(() => {
+                const candidates = criticalResult.critical_points
+                  ?? criticalResult.points
+                  ?? criticalResult.results
+                  ?? criticalResult.stationary_points
+                  ?? [];
+                if (Array.isArray(candidates) && candidates.length) {
+                  return <div className="critical-point-list">
+                    {candidates.map((point, index) => {
+                      const item = (point && typeof point === "object") ? point : { x: point };
+                      const xValue = item.x ?? item.x_value ?? item.point ?? item.critical_x;
+                      const yValue = item.y ?? item.y_value ?? item.f_x ?? item.function_value;
+                      const kind = item.type ?? item.classification ?? item.kind ?? item.extremum ?? "Critical point";
+                      return <div className="result-row" key={index}>
+                        <span>{String(kind)}{xValue != null ? ` · x = ${String(xValue)}` : ""}</span>
+                        <b>{yValue != null ? `f(x) = ${String(yValue)}` : (xValue != null ? `x = ${String(xValue)}` : JSON.stringify(item))}</b>
+                      </div>;
+                    })}
+                  </div>;
+                }
+                return <div className="answer-source">Response received from the API:</div>;
+              })()}
+              {criticalResult.increasing_intervals != null && <div className="answer-source"><b>Increasing:</b> {JSON.stringify(criticalResult.increasing_intervals)}</div>}
+              {criticalResult.decreasing_intervals != null && <div className="answer-source"><b>Decreasing:</b> {JSON.stringify(criticalResult.decreasing_intervals)}</div>}
+              {criticalResult.inflection_points != null && <div className="answer-source"><b>Inflection points:</b> {JSON.stringify(criticalResult.inflection_points)}</div>}
+              <details className="critical-raw-response">
+                <summary>View full API response</summary>
+                <pre>{JSON.stringify(criticalResult, null, 2)}</pre>
+              </details>
+            </>
+          )}
+        </div>
+        <div className="calculus-visual">
+          <div className="calculus-visual-head"><span>QUICK EXAMPLES</span></div>
+          <div className="limit-examples">
+            <button type="button" onClick={() => { setCriticalExpression("x^3 - 3*x"); setCriticalA("-2"); setCriticalB("2"); setCriticalResult(null); }}>
+              <strong>x³ − 3x</strong><span>Local maximum &amp; minimum</span>
+            </button>
+            <button type="button" onClick={() => { setCriticalExpression("x^2"); setCriticalA("-3"); setCriticalB("3"); setCriticalResult(null); }}>
+              <strong>x²</strong><span>One local minimum</span>
+            </button>
+            <button type="button" onClick={() => { setCriticalExpression("x^4 - 4*x^2"); setCriticalA("-3"); setCriticalB("3"); setCriticalResult(null); }}>
+              <strong>x⁴ − 4x²</strong><span>Multiple stationary points</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <p className="calculus-help">Critical points are candidate locations for local extrema. The classification shown depends on the response returned by the backend; a stationary point is not always a maximum or minimum.</p>
     </section>
 
     <section className="method-grid">
