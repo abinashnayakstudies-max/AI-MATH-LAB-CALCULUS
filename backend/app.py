@@ -440,7 +440,169 @@ def calculate_limits(req: LimitRequest):
             "error": f"Could not calculate the limit: "
                      f"{str(e) or 'invalid input'}"
         }
+# ==========================================
+# CRITICAL POINTS API
+# ==========================================
 
+class CriticalPointsRequest(BaseModel):
+    expression: str = Field(..., min_length=1, max_length=200)
+    a: float = Field(default=-10.0, ge=-1000, le=1000)
+    b: float = Field(default=10.0, ge=-1000, le=1000)
+
+
+@app.post("/critical-points")
+def calculate_critical_points(req: CriticalPointsRequest):
+    try:
+        if req.a >= req.b:
+            return {"error": "The lower bound must be smaller than the upper bound."}
+
+        # Parse the expression using the existing safe parser.
+        expr = parse_math_expression(req.expression)
+
+        # Calculate the first and second derivatives.
+        first_derivative = sp.diff(expr, x)
+        second_derivative = sp.diff(first_derivative, x)
+
+        # Find stationary points in the requested interval.
+        domain = sp.Interval(req.a, req.b)
+        solution_set = sp.solveset(
+            first_derivative,
+            x,
+            domain=domain
+        )
+
+        critical_points = []
+
+        # Use exact symbolic solutions when available.
+        if isinstance(solution_set, sp.FiniteSet):
+            candidates = list(solution_set)
+        else:
+            # Numerical fallback for equations without finite symbolic solutions.
+            candidates = []
+            derivative_fn = sp.lambdify(x, first_derivative, "numpy")
+            grid = np.linspace(req.a, req.b, 2001)
+
+            values = []
+            for point in grid:
+                try:
+                    value = float(derivative_fn(float(point)))
+                    values.append(value if np.isfinite(value) else np.nan)
+                except Exception:
+                    values.append(np.nan)
+
+            for i in range(len(grid) - 1):
+                left_x, right_x = grid[i], grid[i + 1]
+                left_y, right_y = values[i], values[i + 1]
+
+                if not np.isfinite(left_y) or not np.isfinite(right_y):
+                    continue
+
+                if abs(left_y) < 1e-8:
+                    candidates.append(sp.Float(left_x))
+                elif left_y * right_y < 0:
+                    try:
+                        root = brentq(
+                            lambda z: float(derivative_fn(z)),
+                            left_x,
+                            right_x
+                        )
+                        candidates.append(sp.Float(root))
+                    except Exception:
+                        pass
+
+        f = sp.lambdify(x, expr, "numpy")
+        df = sp.lambdify(x, first_derivative, "numpy")
+        d2f = sp.lambdify(x, second_derivative, "numpy")
+
+        # Sort candidates and remove duplicates.
+        numeric_candidates = []
+
+        for candidate in candidates:
+            try:
+                point = float(sp.N(candidate))
+
+                if not np.isfinite(point):
+                    continue
+
+                if req.a - 1e-8 <= point <= req.b + 1e-8:
+                    if not any(
+                        abs(point - existing) < 1e-5
+                        for existing in numeric_candidates
+                    ):
+                        numeric_candidates.append(point)
+
+            except Exception:
+                continue
+
+        numeric_candidates.sort()
+
+        for point in numeric_candidates:
+            try:
+                y_value = float(f(point))
+                derivative_value = float(df(point))
+                second_value = float(d2f(point))
+
+                if not (
+                    np.isfinite(y_value)
+                    and np.isfinite(derivative_value)
+                    and np.isfinite(second_value)
+                ):
+                    continue
+
+                # Classify using the second derivative test.
+                tolerance = 1e-7
+
+                if second_value > tolerance:
+                    classification = "Local Minimum"
+                elif second_value < -tolerance:
+                    classification = "Local Maximum"
+                else:
+                    classification = "Inconclusive: Further Testing Needed"
+
+                critical_points.append({
+                    "x": point,
+                    "y": y_value,
+                    "second_derivative": second_value,
+                    "classification": classification
+                })
+
+            except Exception:
+                continue
+
+        # Generate graph samples for future frontend visualization.
+        graph_x = np.linspace(req.a, req.b, 201)
+        plot_points = []
+
+        for point in graph_x:
+            try:
+                value = float(f(float(point)))
+
+                if np.isfinite(value):
+                    plot_points.append({
+                        "x": float(point),
+                        "y": value
+                    })
+            except Exception:
+                continue
+
+        return {
+            "success": True,
+            "expression": str(expr),
+            "first_derivative": str(first_derivative),
+            "second_derivative": str(second_derivative),
+            "interval": {
+                "a": req.a,
+                "b": req.b
+            },
+            "critical_points": critical_points,
+            "number_of_critical_points": len(critical_points),
+            "plot_points": plot_points
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Could not calculate critical points: {str(e)}"
+        }
 
 if __name__ == "__main__":
     import uvicorn
