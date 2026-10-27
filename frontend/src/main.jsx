@@ -445,6 +445,9 @@ function App() {
   const reset = () => { setExpression("x^2"); setA("-2"); setB("3"); setResult(null); setValueResult(null); };
 
   return <main className="app">
+    <div className="ambient-glow ambient-glow-one" aria-hidden="true" />
+    <div className="ambient-glow ambient-glow-two" aria-hidden="true" />
+    <div className="background-grid" aria-hidden="true" />
     <header className="topbar">
       <div className="brand-mark"><FlaskConical size={20}/><div><strong>AI Math Lab</strong><span>Computational Mathematics & Engineering</span></div></div>
       <nav><a className="active" href="#mvt-workspace">MVT Explorer</a><a href="#calculus-engine">Calculus Engine</a><a href="#limits-continuity">Limits</a><a href="#critical-points">Critical Points</a><a href="#calculus-engine">Taylor (planned)</a><a href="#calculus-engine">Signals (planned)</a></nav>
