@@ -826,26 +826,20 @@ function App() {
     }
   }, [criticalExpression, criticalA, criticalB]);
 
-  // Desmos-Style Reactive Debounced Auto-Compute
+  // Initial default calculations on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (activePage === "mvt") calculateMVT();
-      else if (activePage === "calculus") calculateCalculus();
-      else if (activePage === "taylor") calculateTaylor();
-      else if (activePage === "riemann") calculateRiemann();
-      else if (activePage === "critical") calculateCriticalPoints();
-      else if (activePage === "limits") calculateLimit();
-    }, 550);
-    return () => clearTimeout(timer);
-  }, [
-    activePage,
-    expression, a, b,
-    calculusExpression, calculusOperation, calculusOrder, calculusA, calculusB,
-    taylorExpression, taylorPoint, taylorOrder,
-    riemannExpression, riemannA, riemannB, riemannN, riemannMethod,
-    criticalExpression, criticalA, criticalB,
-    limitExpression, limitPoint, limitOperation, limitDirection
-  ]);
+    calculateMVT();
+  }, []);
+
+  // Compute tab default once when opening an uncalculated tab
+  useEffect(() => {
+    if (activePage === "mvt" && !result) calculateMVT();
+    else if (activePage === "calculus" && !calculusResult) calculateCalculus();
+    else if (activePage === "taylor" && !taylorResult) calculateTaylor();
+    else if (activePage === "riemann" && !riemannResult) calculateRiemann();
+    else if (activePage === "critical" && !criticalResult) calculateCriticalPoints();
+    else if (activePage === "limits" && !limitResult) calculateLimit();
+  }, [activePage]);
 
   async function findValue() {
     setValueLoading(true);
@@ -1026,17 +1020,18 @@ function App() {
                 className="function-input"
                 value={expression}
                 onChange={e => setExpression(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") calculateMVT(); }}
                 placeholder="x^2 + sin(x)"
               />
 
               <div className="bounds">
                 <div>
                   <label>LOWER a</label>
-                  <input value={a} onChange={e => setA(e.target.value)} />
+                  <input value={a} onChange={e => setA(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateMVT(); }} />
                 </div>
                 <div>
                   <label>UPPER b</label>
-                  <input value={b} onChange={e => setB(e.target.value)} />
+                  <input value={b} onChange={e => setB(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateMVT(); }} />
                 </div>
               </div>
 
@@ -1165,7 +1160,7 @@ function App() {
             </div>
             <div className="finder-form">
               <label>INPUT x</label>
-              <input value={valueX} onChange={e => setValueX(e.target.value)} />
+              <input value={valueX} onChange={e => setValueX(e.target.value)} onKeyDown={e => { if (e.key === "Enter") findValue(); }} />
               <button className="secondary-button" onClick={findValue} disabled={valueLoading}>
                 {valueLoading ? "Evaluating…" : "Evaluate f(x)"}
               </button>
@@ -1206,6 +1201,7 @@ function App() {
               <input
                 value={calculusExpression}
                 onChange={e => setCalculusExpression(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") calculateCalculus(); }}
                 placeholder="3x^3 - 2x + 1"
               />
             </div>
@@ -1233,11 +1229,11 @@ function App() {
               <>
                 <div className="calculus-field limit-field">
                   <label>LOWER LIMIT (a)</label>
-                  <input type="number" value={calculusA} onChange={e => setCalculusA(e.target.value)} />
+                  <input type="number" value={calculusA} onChange={e => setCalculusA(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateCalculus(); }} />
                 </div>
                 <div className="calculus-field limit-field">
                   <label>UPPER LIMIT (b)</label>
-                  <input type="number" value={calculusB} onChange={e => setCalculusB(e.target.value)} />
+                  <input type="number" value={calculusB} onChange={e => setCalculusB(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateCalculus(); }} />
                 </div>
               </>
             )}
@@ -1341,12 +1337,13 @@ function App() {
               <input
                 value={taylorExpression}
                 onChange={e => setTaylorExpression(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") calculateTaylor(); }}
                 placeholder="sin(x)"
               />
             </div>
             <div className="calculus-field limit-field">
               <label>EXPANSION CENTER (a)</label>
-              <input value={taylorPoint} onChange={e => setTaylorPoint(e.target.value)} placeholder="0 for Maclaurin" />
+              <input value={taylorPoint} onChange={e => setTaylorPoint(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateTaylor(); }} placeholder="0 for Maclaurin" />
             </div>
             <div className="calculus-field">
               <label>ORDER N ({taylorOrder})</label>
@@ -1442,16 +1439,17 @@ function App() {
               <input
                 value={riemannExpression}
                 onChange={e => setRiemannExpression(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") calculateRiemann(); }}
                 placeholder="x^2"
               />
             </div>
             <div className="calculus-field limit-field">
               <label>LOWER BOUND a</label>
-              <input value={riemannA} onChange={e => setRiemannA(e.target.value)} />
+              <input value={riemannA} onChange={e => setRiemannA(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateRiemann(); }} />
             </div>
             <div className="calculus-field limit-field">
               <label>UPPER BOUND b</label>
-              <input value={riemannB} onChange={e => setRiemannB(e.target.value)} />
+              <input value={riemannB} onChange={e => setRiemannB(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateRiemann(); }} />
             </div>
             <div className="calculus-field">
               <label>METHOD</label>
@@ -1550,16 +1548,17 @@ function App() {
               <input
                 value={criticalExpression}
                 onChange={e => setCriticalExpression(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") calculateCriticalPoints(); }}
                 placeholder="x^3 - 3x"
               />
             </div>
             <div className="calculus-field limit-field">
               <label>INTERVAL LOWER BOUND</label>
-              <input type="number" value={criticalA} onChange={e => setCriticalA(e.target.value)} />
+              <input type="number" value={criticalA} onChange={e => setCriticalA(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateCriticalPoints(); }} />
             </div>
             <div className="calculus-field limit-field">
               <label>INTERVAL UPPER BOUND</label>
-              <input type="number" value={criticalB} onChange={e => setCriticalB(e.target.value)} />
+              <input type="number" value={criticalB} onChange={e => setCriticalB(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateCriticalPoints(); }} />
             </div>
             <button className="primary-button calculus-run" onClick={calculateCriticalPoints} disabled={criticalLoading}>
               <Play size={15} />
@@ -1657,6 +1656,7 @@ function App() {
               <input
                 value={limitExpression}
                 onChange={e => setLimitExpression(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") calculateLimit(); }}
                 placeholder="sin(x)/x"
               />
             </div>
@@ -1669,7 +1669,7 @@ function App() {
             </div>
             <div className="calculus-field limit-field">
               <label>TARGET POINT x →</label>
-              <input value={limitPoint} onChange={e => setLimitPoint(e.target.value)} placeholder="0, oo, -oo" />
+              <input value={limitPoint} onChange={e => setLimitPoint(e.target.value)} onKeyDown={e => { if (e.key === "Enter") calculateLimit(); }} placeholder="0, oo, -oo" />
             </div>
             {limitOperation === "limit" && (
               <div className="calculus-field">
