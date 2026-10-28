@@ -25,33 +25,34 @@ import {
 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import "./style.css";
 
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
 
 // ----------------------------------------------------
-// KaTeX Math Rendering Component
+// KaTeX Math Rendering Component (Synchronous & Bundled)
 // ----------------------------------------------------
 function MathFormula({ tex, block = false }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!ref.current || !tex) return;
-    if (window.katex) {
-      try {
-        window.katex.render(String(tex), ref.current, {
-          displayMode: block,
-          throwOnError: false
-        });
-        return;
-      } catch (e) {
-        console.warn("KaTeX render error:", e);
-      }
+  const html = useMemo(() => {
+    if (!tex) return "";
+    try {
+      return katex.renderToString(String(tex), {
+        displayMode: block,
+        throwOnError: false
+      });
+    } catch (e) {
+      return String(tex);
     }
-    ref.current.textContent = String(tex);
   }, [tex, block]);
 
-  return <span ref={ref} className={block ? "math-block" : "math-inline"} />;
+  return (
+    <span
+      className={block ? "math-block" : "math-inline"}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 // ----------------------------------------------------
@@ -1381,12 +1382,21 @@ function App() {
 
                   <div className="detected">
                     <span>STEP-BY-STEP DERIVATIVE COEFFICIENTS</span>
-                    <div className="coordinate-list">
+                    <div className="taylor-terms-table">
+                      <div className="taylor-table-header">
+                        <span>Degree</span>
+                        <span>Derivative Value</span>
+                        <span style={{ textAlign: "right" }}>Polynomial Term</span>
+                      </div>
                       {taylorResult.terms?.map((term, i) => (
-                        <div key={i} className="term-chip">
-                          <b>Order {term.order}:</b>
-                          <span>f⁽{term.order}⁾({taylorResult.point}) = {term.derivative_value}</span>
-                          <MathFormula tex={term.latex} />
+                        <div key={i} className="taylor-table-row">
+                          <div className="taylor-order-pill">n = {term.order}</div>
+                          <div className="taylor-deriv-cell">
+                            <MathFormula tex={`f^{(${term.order})}(${taylorResult.point}) = ${term.derivative_value}`} />
+                          </div>
+                          <div className="taylor-term-cell">
+                            <MathFormula tex={term.latex.trim().startsWith('-') ? term.latex : `+ ${term.latex}`} />
+                          </div>
                         </div>
                       ))}
                     </div>
