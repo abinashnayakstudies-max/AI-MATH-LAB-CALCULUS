@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Check,
@@ -17,7 +17,11 @@ import {
   BarChart3,
   TrendingUp,
   Infinity as InfinityIcon,
-  Maximize2
+  Maximize2,
+  ChevronDown,
+  ChevronUp,
+  BookOpen,
+  ArrowRight
 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -26,13 +30,38 @@ import "./style.css";
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
 
 // ----------------------------------------------------
-// 3D Three.js MVT Scene Component with Camera Modes
+// KaTeX Math Rendering Component
+// ----------------------------------------------------
+function MathFormula({ tex, block = false }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!ref.current || !tex) return;
+    if (window.katex) {
+      try {
+        window.katex.render(String(tex), ref.current, {
+          displayMode: block,
+          throwOnError: false
+        });
+        return;
+      } catch (e) {
+        console.warn("KaTeX render error:", e);
+      }
+    }
+    ref.current.textContent = String(tex);
+  }, [tex, block]);
+
+  return <span ref={ref} className={block ? "math-block" : "math-inline"} />;
+}
+
+// ----------------------------------------------------
+// 3D Three.js MVT Scene Component
 // ----------------------------------------------------
 function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
   const mountRef = useRef(null);
   const onInspectPointRef = useRef(onInspectPoint);
   const [hoveredPoint, setHoveredPoint] = useState(null);
-  const [viewMode, setViewMode] = useState("3d"); // "3d" or "2d"
+  const [viewMode, setViewMode] = useState("3d");
   const [autoRotate, setAutoRotate] = useState(false);
   const controlsRef = useRef(null);
   const cameraRef = useRef(null);
@@ -64,7 +93,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     while (mount.firstChild) mount.removeChild(mount.firstChild);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#050811");
+    scene.background = new THREE.Color("#08090d");
 
     const camera = new THREE.PerspectiveCamera(40, mount.clientWidth / Math.max(mount.clientHeight, 1), 0.1, 2000);
     camera.position.set(0.6, 3.2, 11.0);
@@ -83,14 +112,14 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     controls.minDistance = 3.5;
     controls.maxDistance = 30;
     controls.autoRotate = autoRotate;
-    controls.autoRotateSpeed = 1.2;
+    controls.autoRotateSpeed = 1.0;
     controlsRef.current = controls;
 
     const group = new THREE.Group();
     scene.add(group);
 
-    // Starry ambient particles background
-    const particleCount = 180;
+    // Subtle background ambient particle starfield
+    const particleCount = 200;
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount * 3; i += 3) {
@@ -101,39 +130,33 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
     const particleMaterial = new THREE.PointsMaterial({
       color: 0x38bdf8,
-      size: 0.07,
+      size: 0.06,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.3,
       blending: THREE.AdditiveBlending
     });
-    const particles = new THREE.Points(particleGeometry, particleMaterial);
-    scene.add(particles);
+    scene.add(new THREE.Points(particleGeometry, particleMaterial));
 
     let curveLine = null;
-    const addLine = (points, color, opacity = 1, lineWidth = 2) => {
+    const addLine = (points, color, opacity = 1) => {
       if (points.length < 2) return null;
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({
-        color,
-        transparent: opacity < 1,
-        opacity,
-        linewidth: lineWidth
-      });
+      const material = new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity });
       const line = new THREE.Line(geometry, material);
       group.add(line);
       return line;
     };
 
-    const addText = (text, position, color = "#94a3b8", size = 0.3) => {
+    const addText = (text, position, color = "#94a3b8", size = 0.28) => {
       const canvas = document.createElement("canvas");
       canvas.width = 512;
       canvas.height = 128;
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = "600 42px 'JetBrains Mono', Consolas, monospace";
+      ctx.font = "600 40px 'JetBrains Mono', Consolas, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.strokeStyle = "rgba(4, 7, 14, 0.95)";
+      ctx.strokeStyle = "rgba(8, 9, 13, 0.95)";
       ctx.lineWidth = 8;
       ctx.strokeText(String(text), 256, 64);
       ctx.fillStyle = color;
@@ -165,71 +188,49 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     const mapY = val => ((val - yMin) / Math.max(yRange, 1e-12) - 0.5) * worldH;
     const x0 = mapX(0), y0 = mapY(0);
 
-    // Subtle coordinate plane grid
-    const gridColor = 0x162235;
+    // Grid
+    const gridColor = 0x181e2b;
     for (let i = 0; i <= 8; i++) {
       const gx = -worldW / 2 + (worldW * i) / 8;
-      addLine([new THREE.Vector3(gx, -worldH / 2, -0.06), new THREE.Vector3(gx, worldH / 2, -0.06)], gridColor, 0.6);
+      addLine([new THREE.Vector3(gx, -worldH / 2, -0.06), new THREE.Vector3(gx, worldH / 2, -0.06)], gridColor, 0.5);
     }
     for (let i = 0; i <= 6; i++) {
       const gy = -worldH / 2 + (worldH * i) / 6;
-      addLine([new THREE.Vector3(-worldW / 2, gy, -0.06), new THREE.Vector3(worldW / 2, gy, -0.06)], gridColor, 0.6);
+      addLine([new THREE.Vector3(-worldW / 2, gy, -0.06), new THREE.Vector3(worldW / 2, gy, -0.06)], gridColor, 0.5);
     }
 
     // Axes
     const xAxisColor = 0x38bdf8;
     const yAxisColor = 0x34d399;
     const zAxisColor = 0xf59e0b;
-    addLine([new THREE.Vector3(-worldW / 2, y0, 0), new THREE.Vector3(worldW / 2, y0, 0)], xAxisColor, 0.95);
-    addLine([new THREE.Vector3(x0, -worldH / 2, 0), new THREE.Vector3(x0, worldH / 2, 0)], yAxisColor, 0.95);
-    addLine([new THREE.Vector3(x0, y0, -2.5), new THREE.Vector3(x0, y0, 2.5)], zAxisColor, 0.7);
+    addLine([new THREE.Vector3(-worldW / 2, y0, 0), new THREE.Vector3(worldW / 2, y0, 0)], xAxisColor, 0.9);
+    addLine([new THREE.Vector3(x0, -worldH / 2, 0), new THREE.Vector3(x0, worldH / 2, 0)], yAxisColor, 0.9);
+    addLine([new THREE.Vector3(x0, y0, -2.4), new THREE.Vector3(x0, y0, 2.4)], zAxisColor, 0.65);
 
-    // Axis Arrows
-    const arrow = (origin, dir, length, color) => {
-      const a = new THREE.ArrowHelper(dir, origin, length, color, 0.22, 0.12);
-      group.add(a);
-    };
-    arrow(new THREE.Vector3(worldW / 2 - 0.4, y0, 0), new THREE.Vector3(1, 0, 0), 0.42, xAxisColor);
-    arrow(new THREE.Vector3(x0, worldH / 2 - 0.4, 0), new THREE.Vector3(0, 1, 0), 0.42, yAxisColor);
-    arrow(new THREE.Vector3(x0, y0, 2.1), new THREE.Vector3(0, 0, 1), 0.38, zAxisColor);
-
-    addText("X [Input]", new THREE.Vector3(worldW / 2 - 0.35, y0 - 0.36, 0.08), "#7dd3fc", 0.32);
-    addText("Y [f(x)]", new THREE.Vector3(x0 + 0.68, worldH / 2 - 0.12, 0.08), "#6ee7b7", 0.32);
-    addText("Z [Depth]", new THREE.Vector3(x0 + 0.8, y0 + 0.38, 2.3), "#fcd34d", 0.28);
+    addText("X Axis", new THREE.Vector3(worldW / 2 - 0.4, y0 - 0.36, 0.08), "#7dd3fc", 0.3);
+    addText("Y [f(x)]", new THREE.Vector3(x0 + 0.65, worldH / 2 - 0.12, 0.08), "#6ee7b7", 0.3);
 
     // Ticks
     const tickCount = 6;
     for (let i = 0; i <= tickCount; i++) {
       const t = i / tickCount;
       const xv = xMin + t * xRange, xp = mapX(xv);
-      addLine([new THREE.Vector3(xp, y0 - 0.08, 0.02), new THREE.Vector3(xp, y0 + 0.08, 0.02)], xAxisColor, 0.8);
-      addText(fmt(xv), new THREE.Vector3(xp, y0 - 0.28, 0.04), "#94a3b8", 0.26);
+      addLine([new THREE.Vector3(xp, y0 - 0.07, 0.02), new THREE.Vector3(xp, y0 + 0.07, 0.02)], xAxisColor, 0.8);
+      addText(fmt(xv), new THREE.Vector3(xp, y0 - 0.26, 0.04), "#94a3b8", 0.25);
 
       const yv = yMin + t * yRange, yp = mapY(yv);
-      addLine([new THREE.Vector3(x0 - 0.08, yp, 0.02), new THREE.Vector3(x0 + 0.08, yp, 0.02)], yAxisColor, 0.8);
+      addLine([new THREE.Vector3(x0 - 0.07, yp, 0.02), new THREE.Vector3(x0 + 0.07, yp, 0.02)], yAxisColor, 0.8);
       if (i !== Math.round(tickCount / 2)) {
-        addText(fmt(yv), new THREE.Vector3(x0 - 0.56, yp, 0.04), "#94a3b8", 0.26);
+        addText(fmt(yv), new THREE.Vector3(x0 - 0.52, yp, 0.04), "#94a3b8", 0.25);
       }
     }
 
-    // Origin
-    const originMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffffff })
-    );
-    originMesh.position.set(x0, y0, 0.08);
-    group.add(originMesh);
-
     if (plot) {
       const valid = plot.pts.filter(p => Number.isFinite(p.y));
-      // Primary neon curve
-      curveLine = addLine(valid.map(p => new THREE.Vector3(mapX(p.x), mapY(p.y), 0.12)), 0x38bdf8, 1, 3);
+      curveLine = addLine(valid.map(p => new THREE.Vector3(mapX(p.x), mapY(p.y), 0.12)), 0x38bdf8, 1);
 
       const nearest = target =>
-        plot.pts.reduce(
-          (best, p) => (Math.abs(p.x - target) < Math.abs(best.x - target) ? p : best),
-          plot.pts[0]
-        );
+        plot.pts.reduce((best, p) => (Math.abs(p.x - target) < Math.abs(best.x - target) ? p : best), plot.pts[0]);
       const pa = nearest(result.a), pb = nearest(result.b);
 
       // Secant line
@@ -255,14 +256,10 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
         1
       );
 
-      // Verified MVT Point Sphere
+      // Verified MVT Point
       const verifiedSphere = new THREE.Mesh(
         new THREE.SphereGeometry(0.12, 24, 24),
-        new THREE.MeshStandardMaterial({
-          color: 0x38bdf8,
-          emissive: 0x0284c7,
-          emissiveIntensity: 1.2
-        })
+        new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 1.2 })
       );
       verifiedSphere.position.set(mapX(c), mapY(pc.y), 0.24);
       group.add(verifiedSphere);
@@ -270,7 +267,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
       addLine([new THREE.Vector3(mapX(c), y0, 0.18), new THREE.Vector3(mapX(c), mapY(pc.y), 0.18)], 0x38bdf8, 0.65);
       addText(`Verified c = ${fmt(c)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.36, 0.28), "#7dd3fc", 0.28);
 
-      // All numerical solutions
+      // Other roots
       (result.mvt_points || []).forEach(root => {
         if (Math.abs(root - c) < 1e-5) return;
         const rp = nearest(root);
@@ -282,7 +279,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
         group.add(marker);
       });
 
-      // AI ML predicted point
+      // AI predicted point
       if (Number.isFinite(result.ml_c)) {
         const mp = nearest(result.ml_c);
         const aiMarker = new THREE.Mesh(
@@ -309,7 +306,6 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.2));
 
-    // Raycaster for hover and click-to-pin
     const raycaster = new THREE.Raycaster();
     raycaster.params.Line.threshold = 0.2;
     const pointer = new THREE.Vector2();
@@ -385,7 +381,6 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     };
   }, [plot, result, inspectX, inspectValue, autoRotate]);
 
-  // View mode switcher: 3D vs 2D front view
   const setCameraView = mode => {
     setViewMode(mode);
     if (!cameraRef.current || !controlsRef.current) return;
@@ -400,21 +395,16 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     }
   };
 
-  const resetCamera = () => {
-    setCameraView("3d");
-  };
-
   return (
     <div className="scene-wrap">
       <div ref={mountRef} className="three-canvas" />
 
-      {/* Floating Canvas Controls */}
+      {/* Floating Toolbar */}
       <div className="canvas-toolbar">
         <button
           type="button"
           className={viewMode === "3d" ? "active" : ""}
           onClick={() => setCameraView("3d")}
-          title="3D Perspective View"
         >
           <Compass size={13} /> 3D View
         </button>
@@ -422,24 +412,22 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
           type="button"
           className={viewMode === "2d" ? "active" : ""}
           onClick={() => setCameraView("2d")}
-          title="2D Planar Orthographic View"
         >
-          <Maximize2 size={13} /> 2D Flat
+          <Maximize2 size={13} /> 2D Planar
         </button>
         <button
           type="button"
           className={autoRotate ? "active" : ""}
           onClick={() => setAutoRotate(!autoRotate)}
-          title="Auto-Rotate Inspection"
         >
           <Activity size={13} /> Rotate
         </button>
-        <button type="button" onClick={resetCamera} title="Reset Camera">
+        <button type="button" onClick={() => setCameraView("3d")}>
           <RotateCcw size={13} /> Reset
         </button>
       </div>
 
-      <div className="axis-key" aria-label="Coordinate axis legend">
+      <div className="axis-key">
         <span><i className="axis-x" />X = input</span>
         <span><i className="axis-y" />Y = f(x)</span>
         <span><i className="axis-z" />Z = depth</span>
@@ -451,7 +439,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
         <span><i className="line-key tangent-key" />Tangent</span>
         <span><i className="point-key" />Verified c</span>
         <span><i className="ai-key" />AI c</span>
-        {inspectX != null && <span><i className="inspect-key" />Pinned ({Number(inspectX).toFixed(2)})</span>}
+        {inspectX != null && <span><i className="inspect-key" />Pinned</span>}
       </div>
 
       {hoveredPoint && (
@@ -465,7 +453,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
       {!result && (
         <div className="scene-empty">
           <Crosshair size={20} />
-          <span>Enter a function and press Solve MVT to render the 3D scene.</span>
+          <span>Enter a function and interval to view the 3D MVT scene.</span>
         </div>
       )}
     </div>
@@ -473,13 +461,13 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
 }
 
 // ----------------------------------------------------
-// 2D Interactive Calculus Mini Plot
+// 2D Calculus Mini Plot
 // ----------------------------------------------------
 function CalculusMiniPlot({ points, derivativePoints }) {
   const width = 640, height = 220, pad = 28;
   const all = [...(points || []), ...(derivativePoints || [])].filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
   if (!all.length) {
-    return <div className="calculus-plot-empty">Run a calculation to preview the curve and derivative.</div>;
+    return <div className="calculus-plot-empty">Run a calculation to preview curve and derivative.</div>;
   }
   const minX = Math.min(...all.map(p => p.x)), maxX = Math.max(...all.map(p => p.x));
   const rawMinY = Math.min(...all.map(p => p.y)), rawMaxY = Math.max(...all.map(p => p.y));
@@ -495,7 +483,7 @@ function CalculusMiniPlot({ points, derivativePoints }) {
   const zeroX = minX <= 0 && maxX >= 0 ? pad + ((0 - minX) / (maxX - minX)) * (width - 2 * pad) : null;
 
   return (
-    <svg className="calculus-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Function and derivative plot">
+    <svg className="calculus-plot" viewBox={`0 0 ${width} ${height}`} role="img">
       {zeroY !== null && <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="plot-axis" />}
       {zeroX !== null && <line x1={zeroX} y1={pad} x2={zeroX} y2={height - pad} className="plot-axis" />}
       <polyline points={line(points)} className="plot-original" />
@@ -510,7 +498,7 @@ function CalculusMiniPlot({ points, derivativePoints }) {
 function RiemannAreaPlot({ rectangles, plotPoints, a, b }) {
   const width = 640, height = 240, pad = 30;
   if (!rectangles?.length || !plotPoints?.length) {
-    return <div className="calculus-plot-empty">Configure interval and partitions to render Riemann sum rectangles.</div>;
+    return <div className="calculus-plot-empty">Select bounds and partitions to render area slices.</div>;
   }
 
   const allX = plotPoints.map(p => p.x);
@@ -533,10 +521,7 @@ function RiemannAreaPlot({ rectangles, plotPoints, a, b }) {
 
   return (
     <svg className="calculus-plot riemann-svg" viewBox={`0 0 ${width} ${height}`}>
-      {/* Zero axis */}
       <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="plot-axis" />
-
-      {/* Riemann Rectangles */}
       {rectangles.map((rect, idx) => {
         const x1 = scaleX(rect.x_left);
         const x2 = scaleX(rect.x_right);
@@ -547,21 +532,13 @@ function RiemannAreaPlot({ rectangles, plotPoints, a, b }) {
 
         return (
           <g key={idx} className="riemann-bar-group">
-            <rect
-              x={x1}
-              y={yPos}
-              width={rectW}
-              height={Math.max(rectH, 1)}
-              className="riemann-rect"
-            />
+            <rect x={x1} y={yPos} width={rectW} height={Math.max(rectH, 1)} className="riemann-rect" />
             <line x1={x1} y1={zeroY} x2={x1} y2={scaleY(rect.height)} stroke="rgba(56, 189, 248, 0.4)" strokeWidth="1" />
             <line x1={x2} y1={zeroY} x2={x2} y2={scaleY(rect.height)} stroke="rgba(56, 189, 248, 0.4)" strokeWidth="1" />
             <line x1={x1} y1={scaleY(rect.height)} x2={x2} y2={scaleY(rect.height)} stroke="#38bdf8" strokeWidth="1.5" />
           </g>
         );
       })}
-
-      {/* Function curve on top */}
       <path d={curvePath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
@@ -574,7 +551,7 @@ function TaylorPlot({ originalPoints, taylorPoints }) {
   const width = 640, height = 220, pad = 28;
   const all = [...(originalPoints || []), ...(taylorPoints || [])].filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
   if (!all.length) {
-    return <div className="calculus-plot-empty">Calculate Taylor series to compare the exact curve with polynomial approximation.</div>;
+    return <div className="calculus-plot-empty">Calculate Taylor series to inspect polynomial approximation.</div>;
   }
   const minX = Math.min(...all.map(p => p.x)), maxX = Math.max(...all.map(p => p.x));
   const rawMinY = Math.min(...all.map(p => p.y)), rawMaxY = Math.max(...all.map(p => p.y));
@@ -641,9 +618,7 @@ function MathKeypad({ onInsert }) {
 function App() {
   const [activePage, setActivePage] = useState("mvt");
   const [apiStatus, setApiStatus] = useState("checking");
-
-  // Active focused input tracker for MathKeypad
-  const [activeInputId, setActiveInputId] = useState("mvt-expr");
+  const [showSteps, setShowSteps] = useState(true);
 
   // MVT Explorer state
   const [expression, setExpression] = useState("x^2");
@@ -709,7 +684,6 @@ function App() {
     checkHealth();
   }, []);
 
-  // Universal token insertion
   const insertToken = val => {
     if (activePage === "mvt") setExpression(prev => prev + val);
     else if (activePage === "calculus") setCalculusExpression(prev => prev + val);
@@ -720,10 +694,9 @@ function App() {
   };
 
   // API Call Handlers
-  async function calculateMVT() {
+  const calculateMVT = useCallback(async () => {
+    if (!expression.trim() || isNaN(Number(a)) || isNaN(Number(b)) || Number(a) >= Number(b)) return;
     setLoading(true);
-    setResult(null);
-    setValueResult(null);
     try {
       const r = await fetch(`${API}/mvt`, {
         method: "POST",
@@ -737,29 +710,11 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [expression, a, b]);
 
-  async function findValue() {
-    setValueLoading(true);
-    setValueResult(null);
-    try {
-      const r = await fetch(`${API}/function-value`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expression, x: Number(valueX) })
-      });
-      const data = await r.json();
-      setValueResult(data);
-    } catch {
-      setValueResult({ error: "Function Value Finder is currently unavailable." });
-    } finally {
-      setValueLoading(false);
-    }
-  }
-
-  async function calculateCalculus() {
+  const calculateCalculus = useCallback(async () => {
+    if (!calculusExpression.trim()) return;
     setCalculusLoading(true);
-    setCalculusResult(null);
     const payload = { expression: calculusExpression, operation: calculusOperation, order: Number(calculusOrder) };
     if (calculusOperation === "definite_integral") {
       payload.a = Number(calculusA);
@@ -778,11 +733,11 @@ function App() {
     } finally {
       setCalculusLoading(false);
     }
-  }
+  }, [calculusExpression, calculusOperation, calculusOrder, calculusA, calculusB]);
 
-  async function calculateTaylor() {
+  const calculateTaylor = useCallback(async () => {
+    if (!taylorExpression.trim()) return;
     setTaylorLoading(true);
-    setTaylorResult(null);
     try {
       const response = await fetch(`${API}/taylor`, {
         method: "POST",
@@ -800,11 +755,11 @@ function App() {
     } finally {
       setTaylorLoading(false);
     }
-  }
+  }, [taylorExpression, taylorPoint, taylorOrder]);
 
-  async function calculateRiemann() {
+  const calculateRiemann = useCallback(async () => {
+    if (!riemannExpression.trim() || Number(riemannA) >= Number(riemannB)) return;
     setRiemannLoading(true);
-    setRiemannResult(null);
     try {
       const response = await fetch(`${API}/riemann-sum`, {
         method: "POST",
@@ -824,11 +779,11 @@ function App() {
     } finally {
       setRiemannLoading(false);
     }
-  }
+  }, [riemannExpression, riemannA, riemannB, riemannN, riemannMethod]);
 
-  async function calculateLimit() {
+  const calculateLimit = useCallback(async () => {
+    if (!limitExpression.trim()) return;
     setLimitLoading(true);
-    setLimitResult(null);
     try {
       const response = await fetch(`${API}/limits`, {
         method: "POST",
@@ -847,13 +802,13 @@ function App() {
     } finally {
       setLimitLoading(false);
     }
-  }
+  }, [limitExpression, limitPoint, limitOperation, limitDirection]);
 
-  async function calculateCriticalPoints() {
-    setCriticalLoading(true);
-    setCriticalResult(null);
+  const calculateCriticalPoints = useCallback(async () => {
     const lower = Number(criticalA);
     const upper = Number(criticalB);
+    if (!criticalExpression.trim() || lower >= upper) return;
+    setCriticalLoading(true);
     try {
       const response = await fetch(`${API}/critical-points`, {
         method: "POST",
@@ -866,6 +821,44 @@ function App() {
       setCriticalResult({ error: "Critical points service connection error." });
     } finally {
       setCriticalLoading(false);
+    }
+  }, [criticalExpression, criticalA, criticalB]);
+
+  // Desmos-Style Reactive Debounced Auto-Compute
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (activePage === "mvt") calculateMVT();
+      else if (activePage === "calculus") calculateCalculus();
+      else if (activePage === "taylor") calculateTaylor();
+      else if (activePage === "riemann") calculateRiemann();
+      else if (activePage === "critical") calculateCriticalPoints();
+      else if (activePage === "limits") calculateLimit();
+    }, 550);
+    return () => clearTimeout(timer);
+  }, [
+    activePage,
+    expression, a, b,
+    calculusExpression, calculusOperation, calculusOrder, calculusA, calculusB,
+    taylorExpression, taylorPoint, taylorOrder,
+    riemannExpression, riemannA, riemannB, riemannN, riemannMethod,
+    criticalExpression, criticalA, criticalB,
+    limitExpression, limitPoint, limitOperation, limitDirection
+  ]);
+
+  async function findValue() {
+    setValueLoading(true);
+    try {
+      const r = await fetch(`${API}/function-value`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expression, x: Number(valueX) })
+      });
+      const data = await r.json();
+      setValueResult(data);
+    } catch {
+      setValueResult({ error: "Function Value Finder is currently unavailable." });
+    } finally {
+      setValueLoading(false);
     }
   }
 
@@ -881,12 +874,10 @@ function App() {
 
   return (
     <main className="app">
-      {/* Background Ambience */}
       <div className="ambient-glow ambient-glow-one" aria-hidden="true" />
       <div className="ambient-glow ambient-glow-two" aria-hidden="true" />
       <div className="background-grid" aria-hidden="true" />
 
-      {/* Render Server Sleep Notice if sleeping */}
       {apiStatus === "sleeping" && (
         <div className="cloud-wake-banner">
           <Zap size={14} className="banner-icon-pulse" />
@@ -896,7 +887,7 @@ function App() {
         </div>
       )}
 
-      {/* Global Header */}
+      {/* Top Navigation */}
       <header className="topbar">
         <div className="brand-mark">
           <div className="brand-icon">
@@ -908,7 +899,6 @@ function App() {
           </div>
         </div>
 
-        {/* Module Navigation Tabs */}
         <nav className="page-nav" aria-label="Math Lab Modules">
           <button
             type="button"
@@ -960,7 +950,7 @@ function App() {
         </div>
       </header>
 
-      {/* Title & Mathematical Formula Showcase */}
+      {/* Hero Section with KaTeX Header Formula */}
       <section className="title-row">
         <div>
           <span className="section-code">
@@ -991,22 +981,22 @@ function App() {
 
         <div className="formula">
           {activePage === "mvt" && (
-            <>f′(c) = <span>(f(b) − f(a)) / (b − a)</span></>
+            <MathFormula tex="f'(c) = \frac{f(b) - f(a)}{b - a}" />
           )}
           {activePage === "calculus" && (
-            <>d/dx <span>[∫ f(x) dx] = f(x)</span></>
+            <MathFormula tex="\frac{d}{dx} \left[ \int f(x)\,dx \right] = f(x)" />
           )}
           {activePage === "taylor" && (
-            <>Pₙ(x) = <span>∑ (f⁽ᵏ⁾(a)/k!) (x − a)ᵏ</span></>
+            <MathFormula tex="P_n(x) = \sum_{k=0}^n \frac{f^{(k)}(a)}{k!} (x - a)^k" />
           )}
           {activePage === "riemann" && (
-            <>∫ f(x)dx ≈ <span>∑ f(xᵢ*) Δx</span></>
+            <MathFormula tex="\int_a^b f(x)\,dx \approx \sum_{i=1}^n f(x_i^*)\,\Delta x" />
           )}
           {activePage === "critical" && (
-            <>f′(x) = <span>0</span>, f″(x) <span>≠ 0</span></>
+            <MathFormula tex="f'(x) = 0 \quad \text{and} \quad f''(x) \neq 0" />
           )}
           {activePage === "limits" && (
-            <>lim <span>x → a</span> f(x) = L</>
+            <MathFormula tex="\lim_{x \to a} f(x) = L" />
           )}
         </div>
       </section>
@@ -1050,7 +1040,7 @@ function App() {
 
               <button className="primary-button" onClick={calculateMVT} disabled={loading}>
                 <Play size={15} />
-                {loading ? "Computing Solution…" : "Solve MVT in 3D"}
+                {loading ? "Computing Solution…" : "Recalculate MVT"}
               </button>
 
               <div className="examples">
@@ -1164,7 +1154,7 @@ function App() {
             </aside>
           </section>
 
-          {/* Function Value Finder */}
+          {/* Coordinate Pinner */}
           <section className="finder panel">
             <div className="finder-copy">
               <span>03 / COORDINATE PINNER</span>
@@ -1195,7 +1185,7 @@ function App() {
       )}
 
       {/* ======================================================== */}
-      {/* 2. CALCULUS ENGINE MODULE                                */}
+      {/* 2. CALCULUS ENGINE MODULE WITH STEP-BY-STEP BREAKDOWN    */}
       {/* ======================================================== */}
       {activePage === "calculus" && (
         <section className="calculus-engine panel">
@@ -1203,7 +1193,7 @@ function App() {
             <div>
               <span>SYMBOLIC CALCULUS WORKSPACE</span>
               <h2>Derivatives &amp; Integrals</h2>
-              <p>Exact closed-form mathematical solutions computed with SymPy.</p>
+              <p>Exact closed-form mathematical solutions computed with SymPy and rendered in KaTeX.</p>
             </div>
             <div className="calculus-badge">EXACT ANALYTICAL ENGINE</div>
           </div>
@@ -1258,24 +1248,57 @@ function App() {
           <div className="calculus-body">
             <div className="calculus-answer">
               {!calculusResult ? (
-                <div className="result-empty">Enter a function expression and click Execute.</div>
+                <div className="result-empty">Enter a function expression to view the closed-form result.</div>
               ) : calculusResult.error ? (
                 <div className="error">{calculusResult.error}</div>
               ) : (
                 <>
                   <span className="answer-label">{String(calculusResult.operation).toUpperCase()}</span>
+                  
+                  {/* KaTeX Rendered Big Formula */}
                   <div className="answer-expression">
-                    {String(calculusResult.result)}
-                    {calculusResult.integration_constant_note ? " + C" : ""}
+                    <MathFormula tex={calculusResult.latex + (calculusResult.integration_constant_note ? " + C" : "")} block={true} />
                   </div>
-                  <div className="answer-source">Original function: f(x) = {String(calculusResult.expression)}</div>
+
+                  <div className="answer-source">
+                    Input: <MathFormula tex={`f(x) = ${calculusResult.original_latex || calculusResult.expression}`} />
+                  </div>
                   {calculusResult.derivative && (
-                    <div className="answer-source">First derivative: f′(x) = {String(calculusResult.derivative)}</div>
+                    <div className="answer-source">
+                      First derivative: <MathFormula tex={`f'(x) = ${calculusResult.derivative}`} />
+                    </div>
                   )}
-                  <div className="answer-latex">
-                    <b>LaTeX Representation:</b>{" "}
-                    <code>{String(calculusResult.latex)}{calculusResult.integration_constant_note ? " + C" : ""}</code>
-                  </div>
+
+                  {/* Step-by-Step Breakdown Accordion */}
+                  {calculusResult.steps?.length > 0 && (
+                    <div className="steps-container">
+                      <div className="steps-header" onClick={() => setShowSteps(!showSteps)}>
+                        <span className="steps-title">
+                          <BookOpen size={14} /> STEP-BY-STEP SOLUTION BREAKDOWN ({calculusResult.steps.length} STEPS)
+                        </span>
+                        {showSteps ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+
+                      {showSteps && (
+                        <div className="steps-list">
+                          {calculusResult.steps.map((st, idx) => (
+                            <div key={idx} className="step-card">
+                              <div className="step-number">{idx + 1}</div>
+                              <div className="step-content">
+                                <strong>{st.title}</strong>
+                                <p>{st.description}</p>
+                                {st.latex && (
+                                  <div className="step-formula">
+                                    <MathFormula tex={st.latex} block={true} />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1297,7 +1320,7 @@ function App() {
       )}
 
       {/* ======================================================== */}
-      {/* 3. TAYLOR SERIES MODULE                                  */}
+      {/* 3. TAYLOR SERIES MODULE WITH DUAL PLOT                   */}
       {/* ======================================================== */}
       {activePage === "taylor" && (
         <section className="calculus-engine panel">
@@ -1351,20 +1374,19 @@ function App() {
               ) : (
                 <>
                   <span className="answer-label">TAYLOR POLYNOMIAL P_{taylorResult.order}(x)</span>
-                  <div className="answer-expression">{taylorResult.polynomial}</div>
-                  <div className="answer-source">Center: a = {taylorResult.point}</div>
-                  <div className="answer-latex">
-                    <b>LaTeX:</b> <code>{taylorResult.latex}</code>
+                  <div className="answer-expression">
+                    <MathFormula tex={`P_{${taylorResult.order}}(x) = ${taylorResult.latex}`} block={true} />
                   </div>
+                  <div className="answer-source">Expansion Center: a = {taylorResult.point}</div>
 
                   <div className="detected">
-                    <span>STEP-BY-STEP TERM BREAKDOWN</span>
+                    <span>STEP-BY-STEP DERIVATIVE COEFFICIENTS</span>
                     <div className="coordinate-list">
                       {taylorResult.terms?.map((term, i) => (
                         <div key={i} className="term-chip">
                           <b>Order {term.order}:</b>
-                          <span>Derivative = {term.derivative_value}</span>
-                          <code>{term.latex}</code>
+                          <span>f⁽{term.order}⁾({taylorResult.point}) = {term.derivative_value}</span>
+                          <MathFormula tex={term.latex} />
                         </div>
                       ))}
                     </div>
@@ -1390,7 +1412,7 @@ function App() {
       )}
 
       {/* ======================================================== */}
-      {/* 4. RIEMANN SUMS MODULE                                   */}
+      {/* 4. RIEMANN SUMS MODULE WITH INTERACTIVE PARTITIONS       */}
       {/* ======================================================== */}
       {activePage === "riemann" && (
         <section className="calculus-engine panel">
@@ -1455,7 +1477,9 @@ function App() {
               ) : (
                 <>
                   <span className="answer-label">SUM APPROXIMATION RESULT</span>
-                  <div className="answer-expression">≈ {riemannResult.riemann_sum}</div>
+                  <div className="answer-expression">
+                    <MathFormula tex={`\\sum_{i=1}^{${riemannResult.n}} f(x_i^*)\\,\\Delta x \\approx ${riemannResult.riemann_sum}`} block={true} />
+                  </div>
                   <div className="result-row">
                     <span>Exact Definite Integral</span>
                     <b>{riemannResult.exact_integral ?? "—"}</b>
@@ -1541,8 +1565,12 @@ function App() {
               ) : (
                 <>
                   <span className="answer-label">EXTREMA ANALYSIS REPORT</span>
-                  <div className="answer-source">First derivative: f′(x) = {criticalResult.first_derivative}</div>
-                  <div className="answer-source">Second derivative: f″(x) = {criticalResult.second_derivative}</div>
+                  <div className="answer-source">
+                    First derivative: <MathFormula tex={`f'(x) = ${criticalResult.first_derivative}`} />
+                  </div>
+                  <div className="answer-source">
+                    Second derivative: <MathFormula tex={`f''(x) = ${criticalResult.second_derivative}`} />
+                  </div>
 
                   {criticalResult.global_maximum && (
                     <div className="result-row highlight-row">
@@ -1657,13 +1685,19 @@ function App() {
               ) : (
                 <>
                   <span className="answer-label">{String(limitResult.operation).toUpperCase()}</span>
-                  <div className="answer-expression">{String(limitResult.result)}</div>
-                  <div className="answer-source">Point: x → {String(limitResult.point)}</div>
+                  <div className="answer-expression">
+                    <MathFormula tex={`\\lim_{x \\to ${limitResult.point}} f(x) = ${limitResult.latex || limitResult.result}`} block={true} />
+                  </div>
+                  <div className="answer-source">Approaching: x → {String(limitResult.point)}</div>
                   {limitResult.left_limit != null && (
-                    <div className="answer-source">Left limit (x → {limitResult.point}⁻): {limitResult.left_limit}</div>
+                    <div className="answer-source">
+                      Left limit: <MathFormula tex={`\\lim_{x \\to ${limitResult.point}^-} = ${limitResult.left_limit}`} />
+                    </div>
                   )}
                   {limitResult.right_limit != null && (
-                    <div className="answer-source">Right limit (x → {limitResult.point}⁺): {limitResult.right_limit}</div>
+                    <div className="answer-source">
+                      Right limit: <MathFormula tex={`\\lim_{x \\to ${limitResult.point}^+} = ${limitResult.right_limit}`} />
+                    </div>
                   )}
                   {limitResult.continuous != null && (
                     <div className="result-row highlight-row">
@@ -1738,7 +1772,7 @@ function App() {
       <footer>
         <div className="footer-content">
           <span>AI MATH LAB · Next-Generation Computational Mathematics Platform</span>
-          <span>FastAPI · PyTorch · SymPy · Three.js · React</span>
+          <span>FastAPI · PyTorch · SymPy · Three.js · React · KaTeX</span>
         </div>
       </footer>
     </main>

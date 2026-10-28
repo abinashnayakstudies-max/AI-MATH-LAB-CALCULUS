@@ -378,6 +378,71 @@ def calculate_calculus(req: CalculusRequest):
             except Exception:
                 continue
 
+        steps = []
+        if req.operation == "differentiate":
+            steps.append({
+                "title": "Define function",
+                "description": "Expression to differentiate with respect to x",
+                "latex": f"f(x) = {sp.latex(expr)}"
+            })
+            if req.order == 1:
+                steps.append({
+                    "title": "Apply differentiation rules",
+                    "description": "Compute first derivative with standard rules",
+                    "latex": f"\\frac{{d}}{{dx}}\\left[{sp.latex(expr)}\\right]"
+                })
+                steps.append({
+                    "title": "Resulting derivative",
+                    "description": "Simplified closed-form derivative",
+                    "latex": f"f'(x) = {sp.latex(result)}"
+                })
+            else:
+                for ord_i in range(1, req.order + 1):
+                    d_i = sp.diff(expr, x, ord_i)
+                    steps.append({
+                        "title": f"Order {ord_i} derivative",
+                        "description": f"Differentiating f^({ord_i - 1})(x)",
+                        "latex": f"f^{{({ord_i})}}(x) = {sp.latex(d_i)}"
+                    })
+        elif req.operation == "integrate":
+            steps.append({
+                "title": "Set up indefinite integral",
+                "description": "Find antiderivative of the function",
+                "latex": f"\\int \\left({sp.latex(expr)}\\right) dx"
+            })
+            steps.append({
+                "title": "Antiderivative calculation",
+                "description": "Evaluate closed-form antiderivative",
+                "latex": f"= {sp.latex(result)}"
+            })
+            steps.append({
+                "title": "Constant of integration",
+                "description": "Include arbitrary constant C for family of curves",
+                "latex": f"{sp.latex(result)} + C"
+            })
+        else:
+            steps.append({
+                "title": "Set up definite integral",
+                "description": f"Net signed area over [{req.a}, {req.b}]",
+                "latex": f"\\int_{{{req.a}}}^{{{req.b}}} \\left({sp.latex(expr)}\\right) dx"
+            })
+            antideriv = sp.integrate(expr, x)
+            steps.append({
+                "title": "Find general antiderivative F(x)",
+                "description": "Determine indefinite integral F(x)",
+                "latex": f"F(x) = {sp.latex(antideriv)}"
+            })
+            steps.append({
+                "title": "Fundamental Theorem of Calculus",
+                "description": f"Evaluate F({req.b}) - F({req.a})",
+                "latex": f"\\left[ {sp.latex(antideriv)} \\right]_{{{req.a}}}^{{{req.b}}}"
+            })
+            steps.append({
+                "title": "Final evaluated area",
+                "description": "Evaluated definite integral value",
+                "latex": f"= {sp.latex(result)}"
+            })
+
         return {
             "success": True,
             "operation": operation_name,
@@ -390,6 +455,7 @@ def calculate_calculus(req: CalculusRequest):
             "plot_points": original_points,
             "derivative_plot_points": derivative_points,
             "integration_constant_note": "+ C" if req.operation == "integrate" else None,
+            "steps": steps
         }
     except Exception as e:
         return {"error": f"Calculus calculation error: {str(e)}"}
