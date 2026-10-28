@@ -283,6 +283,7 @@ function CalculusMiniPlot({ points, derivativePoints }) {
 }
 
 function App() {
+  const [activePage, setActivePage] = useState("mvt");
   const [expression, setExpression] = useState("x^2");
   const [a, setA] = useState("-2");
   const [b, setB] = useState("3");
@@ -450,15 +451,25 @@ function App() {
     <div className="background-grid" aria-hidden="true" />
     <header className="topbar">
       <div className="brand-mark"><FlaskConical size={20}/><div><strong>AI Math Lab</strong><span>Computational Mathematics & Engineering</span></div></div>
-      <nav><a className="active" href="#mvt-workspace">MVT Explorer</a><a href="#calculus-engine">Calculus Engine</a><a href="#limits-continuity">Limits</a><a href="#critical-points">Critical Points</a><a href="#calculus-engine">Taylor (planned)</a><a href="#calculus-engine">Signals (planned)</a></nav>
+      <nav className="page-nav" aria-label="Math Lab pages">
+        <button type="button" className={activePage === "mvt" ? "active" : ""} aria-current={activePage === "mvt" ? "page" : undefined} onClick={() => setActivePage("mvt")}>MVT Explorer</button>
+        <button type="button" className={activePage === "calculus" ? "active" : ""} aria-current={activePage === "calculus" ? "page" : undefined} onClick={() => setActivePage("calculus")}>Calculus Engine</button>
+        <button type="button" className={activePage === "limits" ? "active" : ""} aria-current={activePage === "limits" ? "page" : undefined} onClick={() => setActivePage("limits")}>Limits</button>
+        <button type="button" className={activePage === "critical" ? "active" : ""} aria-current={activePage === "critical" ? "page" : undefined} onClick={() => setActivePage("critical")}>Critical Points</button>
+      </nav>
       <div className="status"><i/> API ONLINE</div>
     </header>
 
     <section className="title-row">
-      <div><span className="section-code">LAB / CALCULUS / 01</span><h1>Generalized Mean Value Theorem</h1><p>Numerical verification, machine-learning estimation, and hybrid refinement for f(x) on [a, b].</p></div>
-      <div className="formula">f′(c) = <span>(f(b) − f(a))</span> / (b − a)</div>
+      <div>
+        <span className="section-code">{activePage === "mvt" ? "LAB / CALCULUS / 01" : activePage === "calculus" ? "LAB / SYMBOLIC MATH / 02" : activePage === "limits" ? "LAB / ANALYSIS / 03" : "LAB / DIFFERENTIATION / 04"}</span>
+        <h1>{activePage === "mvt" ? "Generalized Mean Value Theorem" : activePage === "calculus" ? "Calculus Engine" : activePage === "limits" ? "Limits & Continuity" : "Critical Points & Local Extrema"}</h1>
+        <p>{activePage === "mvt" ? "Numerical verification, machine-learning estimation, and hybrid refinement for f(x) on [a, b]." : activePage === "calculus" ? "Differentiate and integrate mathematical expressions with exact symbolic results and visual previews." : activePage === "limits" ? "Explore two-sided and one-sided limits, behaviour at infinity, and continuity." : "Locate stationary points and inspect local maxima, minima, and other critical behaviour."}</p>
+      </div>
+      <div className="formula">{activePage === "mvt" ? <>f′(c) = <span>(f(b) − f(a))</span> / (b − a)</> : activePage === "calculus" ? <>d/dx <span>∫ f(x) dx</span></> : activePage === "limits" ? <>lim <span>x → a</span> f(x)</> : <>f′(x) <span>= 0</span></>}</div>
     </section>
 
+    {activePage === "mvt" && (
     <section className="workspace" id="mvt-workspace">
       <aside className="controls panel">
         <div className="panel-title"><span>01</span><div><h2>Problem definition</h2><p>Set the function and interval.</p></div></div>
@@ -494,13 +505,17 @@ function App() {
         </>}
       </aside>
     </section>
+    )}
 
+    {activePage === "mvt" && (
     <section className="finder panel">
       <div className="finder-copy"><span>04 / FUNCTION VALUE FINDER</span><h2>Evaluate any point on the curve</h2><p>Enter x to evaluate f(x), or click the curve to pin a sampled coordinate.</p></div>
       <div className="finder-form"><label>x</label><input value={valueX} onChange={e=>setValueX(e.target.value)} /><button className="secondary-button" onClick={findValue} disabled={valueLoading}>{valueLoading ? "Evaluating…" : "Evaluate f(x)"}</button></div>
       <div className="finder-result">{valueResult?.error ? <span className="error-inline">{valueResult.error}</span> : valueResult ? <><span>COORDINATE</span><strong>({Number(valueResult.x).toFixed(5)}, {Number(valueResult.value).toFixed(5)})</strong></> : <span className="muted">No point selected.</span>}</div>
     </section>
+    )}
 
+    {activePage === "calculus" && (
     <section className="calculus-engine panel" id="calculus-engine">
       <div className="calculus-heading"><div><span>05 / NEW MODULE</span><h2>Calculus Engine</h2><p>Differentiate and integrate expressions with exact symbolic results.</p></div><div className="calculus-badge">SYMPY · SYMBOLIC MATH</div></div>
       <div className="calculus-controls">
@@ -524,7 +539,9 @@ function App() {
       </div>
       <p className="calculus-help">Supported syntax: x, pi, e, +, −, *, /, ^ or **, parentheses, sin, cos, tan, exp, log, sqrt, sinh and cosh. Indefinite integrals include the constant of integration C.</p>
     </section>
+    )}
 
+    {activePage === "limits" && (
     <section className="calculus-engine panel limits-module" id="limits-continuity">
       <div className="calculus-heading">
         <div>
@@ -599,7 +616,9 @@ function App() {
       </div>
       <p className="calculus-help">Use oo for positive infinity and -oo for negative infinity. Enter expressions using the supported mathematical syntax.</p>
     </section>
+    )}
 
+    {activePage === "critical" && (
     <section className="calculus-engine panel limits-module" id="critical-points">
       <div className="calculus-heading">
         <div>
@@ -692,12 +711,15 @@ function App() {
       </div>
       <p className="calculus-help">Critical points are candidate locations for local extrema. The classification shown depends on the response returned by the backend; a stationary point is not always a maximum or minimum.</p>
     </section>
+    )}
 
+    {activePage === "mvt" && (
     <section className="method-grid">
       <article><span>AI ESTIMATION</span><h3>V4 PyTorch model</h3><p>Uses sampled function and derivative behaviour to estimate a relative MVT location.</p></article>
       <article><span>NUMERICAL VERIFICATION</span><h3>Brent root search</h3><p>Solves f′(c) − secant slope = 0 across the interval and detects multiple roots.</p></article>
       <article><span>HYBRID METHOD</span><h3>Predict → verify → refine</h3><p>If the AI residual exceeds tolerance, the nearest numerical MVT root becomes the final answer.</p></article>
     </section>
+    )}
 
     <footer>AI Math Lab · V1 Generalized MVT Explorer · Mathematics × AI × Engineering</footer>
   </main>;
