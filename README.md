@@ -1,117 +1,135 @@
-# AI Math Lab — MVT Explorer + Calculus Engine
+# AI Math Lab — Next-Generation Calculus Platform & 3D MVT Explorer
 
-AI Math Lab is an interactive mathematics website combining a generalized Mean Value Theorem (MVT) explorer, numerical root finding, a trained PyTorch model, a Three.js visualization, a function-value finder, and a symbolic calculus workspace.
+**AI Math Lab** is an interactive, modern computational mathematics application combining symbolic calculus, numerical methods, a trained PyTorch model, and rich 3D Three.js visualizations.
 
-## Project structure
+---
+
+## 🚀 Key Modules & Capabilities
+
+1. **Generalized Mean Value Theorem (MVT) Explorer:**
+   - Interactive 3D/2D WebGL visualization (Three.js) with real-time coordinate inspection.
+   - Dual perspective: 3D orbit view vs. 2D flat planar orthographic projection.
+   - AI ML candidate estimation (`mvt_model_v4.pt`) + Brent numerical root verification.
+   - Dynamic tangent lines, secant slopes, and interactive click-to-pin coordinate evaluation.
+
+2. **Symbolic Calculus Engine:**
+   - 1st through 5th order derivatives ($f', f'', f''', \dots$) and indefinite/definite integrals via SymPy.
+   - Exact analytical LaTeX expressions and real-time dual curve previews.
+
+3. **Taylor & Maclaurin Series Expansions:**
+   - Dynamic polynomial order slider ($N = 1 \dots 10$) with step-by-step term breakdowns.
+   - Visual convergence comparison plot showing exact $f(x)$ vs. Taylor polynomial $P_N(x)$.
+
+4. **Riemann Sums & Area Visualizer:**
+   - Definite integral approximation using Left, Right, Midpoint, and Trapezoidal rules.
+   - Live partition slider ($n = 4 \dots 50$) with geometric rectangle rendering and error quantification.
+
+5. **Critical Points, Extrema & Inflections:**
+   - Stationary point detection, local maxima/minima classification via second derivative test.
+   - Global extrema on closed intervals $[a, b]$ and inflection points where $f''(x) = 0$.
+
+6. **Limits & Continuity:**
+   - One-sided ($x \to a^-, x \to a^+$) and two-sided limits, limits at infinity ($\pm \infty$), and continuity testing.
+
+7. **Smart Math Parser with Implicit Multiplication:**
+   - Write standard natural math like `2x`, `3sin(x)`, `x(x+1)`, `4e^x`, and `ln(x)` without requiring explicit multiplication asterisks (`*`).
+
+---
+
+## 🛠️ Project Structure
 
 ```text
 ai-math-lab/
 ├── backend/
-│   ├── app.py
-│   ├── requirements.txt
+│   ├── app.py               # FastAPI server & mathematical engines
+│   ├── requirements.txt     # Python dependencies
+│   ├── test_backend.py      # Automated backend unit test suite
+│   ├── Dockerfile           # Production container build
 │   └── models/
-│       └── mvt_model_v4.pt
+│       └── mvt_model_v4.pt  # Trained PyTorch MVT neural network
 ├── frontend/
-│   ├── .env.example
-│   ├── package.json
-│   ├── index.html
+│   ├── package.json         # React 18, Vite, Three.js, Lucide icons
+│   ├── index.html           # Modern typography & meta tags
+│   ├── vercel.json          # Vercel deployment configuration
 │   └── src/
-│       ├── main.jsx
-│       └── style.css
-├── render.yaml
-├── README.md
-└── THIRD_PARTY_NOTICES.md
+│       ├── main.jsx         # Full interactive client application
+│       └── style.css        # Cyber-scientific glassmorphic UI design
+├── render.yaml              # Render blueprint deployment config
+└── README.md
 ```
 
-## Features
+---
 
-- **MVT Explorer:** numerical MVT point search, ML candidate estimate, hybrid verification, and an interactive 3D curve/secant/tangent scene.
-- **Coordinate interaction:** labelled X/Y/Z axes, origin, hover coordinates, and click-to-pin curve points.
-- **Function Value Finder:** evaluates `f(x)` at a selected input.
-- **Calculus Engine:** first through fifth derivatives, indefinite integration, and definite integration.
-- **Calculus plot:** previews the original function and its first derivative.
-- **Restricted expression parser:** supports `x`, numeric constants, `pi`, `e`, arithmetic operators, powers, parentheses, and common functions (`sin`, `cos`, `tan`, `exp`, `log`, `sqrt`, `sinh`, `cosh`, etc.).
+## 💻 Local Development
 
-## Local development
-
-### Backend
+### Backend (Python FastAPI)
 
 From the `backend` directory:
 
 ```bash
+# Set up virtual environment
 python -m venv .venv
+
+# Activate environment:
 # Windows PowerShell:
 .venv\Scripts\Activate.ps1
 # macOS/Linux:
 # source .venv/bin/activate
+
+# Install dependencies and run
 pip install -r requirements.txt
 uvicorn app:app --reload --host 127.0.0.1 --port 8000
 ```
 
-API documentation: `http://127.0.0.1:8000/docs`
+- API Docs: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/health`
+- Run automated unit tests:
+  ```bash
+  python test_backend.py
+  ```
 
-Health check: `http://127.0.0.1:8000/health`
+### Frontend (React + Vite)
 
-### Frontend
-
-In a second terminal, from `frontend`:
+From the `frontend` directory:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` to the backend URL if it differs from the default. Restart the Vite server after changing environment variables.
-
-## Deployment recommendation
-
-The frontend can be deployed to **Vercel**, while the FastAPI backend and PyTorch model remain on **Render**. This keeps the current ML stack on a persistent Python service rather than forcing PyTorch/SciPy into a serverless function.
-
-### Backend on Render
-
-The root `render.yaml` contains a Render Blueprint for the backend. Import the repository into Render or update the existing Web Service with:
-
-- Root directory: `backend`
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- Health check path: `/health`
-
-After deployment, verify `/health` reports `"model_available": true`.
-
-### Frontend on Vercel
-
-1. Import this repository into Vercel.
-2. Set **Root Directory** to `frontend`.
-3. Framework preset: **Vite**.
-4. Add environment variable `VITE_API_BASE_URL` with the full URL of the deployed Render backend (no trailing slash), for example `https://your-backend.onrender.com`.
-5. Deploy the frontend.
-
-The frontend and backend are deployed separately, but remain in this single repository. Do not switch off the existing deployment until both services have been verified.
-
-## API endpoints
-
-- `GET /health`
-- `POST /mvt` — body: `{"expression":"x^2","a":-2,"b":3}`
-- `POST /function-value` — body: `{"expression":"x^2","x":3}`
-- `POST /calculus` — body examples:
-
-Differentiate:
-```json
-{"expression":"x^3 + 2*x^2 - 5*x + 1","operation":"differentiate","order":1}
+Create `.env.local` if pointing to a remote backend:
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-Indefinite integral:
-```json
-{"expression":"x^2","operation":"integrate"}
-```
+---
 
-Definite integral:
-```json
-{"expression":"x^2","operation":"definite_integral","a":0,"b":3}
-```
+## 🌐 Production Deployment
 
-The calculus endpoint returns symbolic output and sampled points for plotting. Mathematical expressions can still have domain restrictions; only use expressions and intervals where the relevant operation is defined.
+### 1. Backend on Render (Web Service or Docker)
+The repository includes a ready-to-deploy `render.yaml` blueprint:
+- **Runtime:** Python 3.11.9 (or Docker via `backend/Dockerfile`)
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- **Health Check Path:** `/health`
 
-## Important note
+### 2. Frontend on Vercel
+1. Import the repository into Vercel.
+2. Select **Vite** as framework and set **Root Directory** to `frontend`.
+3. Add environment variable:
+   `VITE_API_BASE_URL=https://your-backend.onrender.com`
+4. Deploy!
 
-Machine-learning predictions are estimates, not mathematical proofs. MVT candidates are independently checked with numerical methods. Numerical root searches may not detect every root for every possible function. This is an educational project, not a universal computer algebra system.
+---
+
+## 📡 API Endpoints
+
+- `GET /` — API service overview and available endpoints
+- `GET /health` — Health check & model status
+- `POST /function-value` — Evaluate $f(x)$ at $x$
+- `POST /mvt` — Mean Value Theorem numerical & AI solver
+- `POST /calculus` — Symbolic differentiation and integration
+- `POST /taylor` — Taylor series polynomial expansion & curve sampling
+- `POST /riemann-sum` — Numerical integration & partition rectangles
+- `POST /critical-points` — Stationary points, extrema, and inflections
+- `POST /limits` — One-sided/two-sided limits and continuity check
