@@ -579,3 +579,301 @@ a:focus-visible, button:focus-visible, summary:focus-visible {
   .limit-examples { grid-template-columns: 1fr; }
 }
 
+
+/* Multi-page navigation: the active underline follows the selected page. */
+.topbar .page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.5vw, 22px);
+  min-width: 0;
+  flex: 1;
+}
+.topbar .page-nav button {
+  position: relative;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 0;
+  padding: 24px 1px 23px;
+  background: transparent;
+  color: #9aa5c2;
+  box-shadow: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .22s ease;
+}
+.topbar .page-nav button:hover {
+  color: #f1efff;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.topbar .page-nav button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  height: 2px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #a994ff, #62d9ee);
+  box-shadow: 0 0 12px rgba(139, 125, 255, .55);
+  transform: scaleX(0);
+  transform-origin: center;
+  opacity: 0;
+  transition: transform .24s ease, opacity .2s ease;
+}
+.topbar .page-nav button.active {
+  color: #f1efff;
+  background: transparent;
+  box-shadow: none;
+}
+.topbar .page-nav button.active::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+.title-row { animation: page-title-enter .28s ease both; }
+@keyframes page-title-enter {
+  from { opacity: .55; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 1120px) {
+  .topbar .page-nav { display: flex; gap: 12px; }
+  .topbar .page-nav button { font-size: 10px; }
+}
+@media (max-width: 760px) {
+  .topbar { align-items: flex-start; flex-wrap: wrap; padding: 12px; }
+  .topbar .brand-mark { flex: 1 1 auto; }
+  .topbar .page-nav {
+    order: 3;
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    padding: 0 2px;
+    gap: 18px;
+  }
+  .topbar .page-nav button { padding: 13px 1px 16px; font-size: 11px; }
+  .topbar .page-nav button::after { bottom: 7px; }
+  .topbar .status { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar .page-nav button,
+  .topbar .page-nav button::after,
+  .title-row { animation: none; transition: none; }
+}
+
+
+/* ─────────────────────────────────────────────────────────────
+   AI MATH LAB · LIGHT LUXURY PALETTE
+   Warm cream canvas · muted sage surfaces · deep burgundy accents
+   ───────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --bg: #F5F0E6;
+  --surface: #FFFCF5;
+  --surface-raised: #FFFFFF;
+  --border: #D9DED3;
+  --muted: #747B70;
+  --accent: #641E32;
+  --accent-2: #A3ADA0;
+  --good: #536C59;
+  --text: #292725;
+}
+html { background: #F5F0E6; }
+body {
+  color: #292725;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(163,173,160,.22), transparent 38rem),
+    radial-gradient(ellipse at 95% 15%, rgba(100,30,50,.07), transparent 34rem),
+    linear-gradient(180deg, #F8F4EC 0%, #F5F0E6 58%, #F0E9DD 100%);
+  background-attachment: fixed;
+}
+body::before {
+  opacity: .13;
+  background-image: radial-gradient(rgba(100,30,50,.17) .6px, transparent .6px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+.ambient-glow-one { background: #A3ADA0; opacity: .2; }
+.ambient-glow-two { background: #641E32; opacity: .08; }
+.topbar {
+  border-color: #D9DED3;
+  background: rgba(255,252,245,.92);
+  box-shadow: 0 12px 35px rgba(56,43,36,.07);
+}
+.brand-mark { color: #292725; }
+.brand-mark > svg {
+  border-color: rgba(100,30,50,.2);
+  color: #641E32;
+  background: linear-gradient(145deg, #E8E0D4, #F8F4EC);
+  filter: none;
+}
+.brand-mark span { color: #747B70; }
+.status {
+  border-color: #D4DED2;
+  background: #E7EDE4;
+  color: #536C59;
+}
+.status i { background: #66836C; box-shadow: none; }
+.topbar .page-nav button { color: #747B70; }
+.topbar .page-nav button:hover { color: #641E32; }
+.topbar .page-nav button.active { color: #641E32; }
+.topbar .page-nav button::after {
+  background: #641E32;
+  box-shadow: none;
+}
+.title-row h1 { color: #292725; }
+.title-row p { color: #747B70; }
+.section-code, .plot-header>div>span, .finder-copy>span, .method-grid span {
+  color: #641E32;
+}
+.formula {
+  border-color: #D9DED3;
+  background: linear-gradient(135deg, #FFFCF5, #E8EDE5);
+  box-shadow: inset 0 1px rgba(255,255,255,.7), 0 12px 30px rgba(56,43,36,.05);
+  color: #641E32;
+}
+.formula span { color: #292725; }
+.panel {
+  border-color: #D9DED3;
+  background: linear-gradient(145deg, rgba(255,252,245,.98), rgba(247,244,236,.98));
+  box-shadow: 0 15px 38px rgba(56,43,36,.055), inset 0 1px rgba(255,255,255,.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.panel:hover { border-color: #A3ADA0; }
+.panel-title > span {
+  border-color: #D9DED3;
+  color: #641E32;
+  background: #E8EDE5;
+}
+.panel-title h2, .calculus-heading h2, .finder-copy h2, .plot-header h2,
+.method-grid h3 { color: #292725; }
+.panel-title p, .finder-copy p, .method-grid p { color: #747B70; }
+.controls label, .finder-form label, .calculus-field label { color: #747B70; }
+input, .calculus-field input, .calculus-field select {
+  border-color: #D4D8CF;
+  background: #FFFCF5;
+  color: #292725;
+}
+input::placeholder, .calculus-field input::placeholder { color: #96998F; }
+input:focus, .calculus-field input:focus, .calculus-field select:focus {
+  border-color: #8C5262;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(100,30,50,.09);
+}
+.primary-button, .secondary-button {
+  border-color: #641E32;
+  background: #641E32;
+  color: #FFF9F1;
+  box-shadow: 0 5px 12px rgba(100,30,50,.12);
+}
+.primary-button:hover, .secondary-button:hover {
+  border-color: #4E1727;
+  background: #4E1727;
+  color: #FFFFFF;
+}
+.primary-button:disabled, .secondary-button:disabled { opacity: .55; }
+.text-button { color: #747B70; }
+.text-button:hover { color: #641E32; }
+.examples { border-color: #D9DED3; }
+.examples span { color: #747B70; }
+.examples button, .coordinate-list button, .limit-examples button {
+  border-color: #D9DED3;
+  background: #F0F2EB;
+  color: #4F584D;
+}
+.examples button:hover, .coordinate-list button:hover, .limit-examples button:hover {
+  border-color: #A3ADA0;
+  background: #E5EAE1;
+}
+.method-note { border-color: #D9DED3; color: #747B70; }
+.method-note svg { color: #657A67; }
+.scene-wrap {
+  border-color: #D9DED3;
+  background: #F9F6EF;
+}
+.scene-labels, .axis-key, .coordinate-readout {
+  background: rgba(255,252,245,.94);
+  border-color: #D9DED3;
+  color: #4F584D;
+}
+.coordinate-readout span { color: #747B70; }
+.coordinate-readout strong { color: #641E32; }
+.coordinate-readout small { color: #747B70; }
+.axis-key { color: #4F584D; }
+.scene-empty { color: #747B70; }
+.plot-foot, .drag-note { color: #747B70; }
+.result-empty { color: #747B70; }
+.verified-box {
+  border-color: #C9D7C7;
+  background: #EAF0E7;
+}
+.verified-box>span, .detected>span { color: #536C59; }
+.verified-box strong { color: #405D47; }
+.verified-box small { color: #536C59; }
+.result-row { border-color: #E2E2D8; }
+.result-row span { color: #747B70; }
+.result-row b { color: #292725; }
+.detected code {
+  border-color: #D9DED3;
+  background: #F0F2EB;
+  color: #536C59;
+}
+.error, .error-inline {
+  color: #7A253B !important;
+  border-color: #E2C6CC;
+  background: #F8E9EB;
+}
+.finder { background: rgba(255,252,245,.72); }
+.finder-result { border-color: #D9DED3; }
+.finder-result>span { color: #747B70; }
+.finder-result strong { color: #641E32; }
+.muted { color: #747B70 !important; }
+.method-grid article { border-color: #D9DED3; }
+footer { border-color: #D9DED3; color: #747B70; }
+.calculus-heading > div:first-child > span,
+.calculus-visual-head > span { color: #747B70; }
+.calculus-heading p, .calculus-help, .answer-source, .answer-latex { color: #747B70; }
+.calculus-badge {
+  border-color: #D9DED3;
+  color: #641E32;
+  background: #F0E5E5;
+}
+.calculus-controls { border-color: #D9DED3; background: rgba(232,237,229,.55); }
+.calculus-answer, .calculus-visual { border-color: #D9DED3; background: rgba(255,252,245,.86); }
+.answer-label { color: #536C59; }
+.answer-expression { color: #641E32; }
+.answer-latex { border-color: #D9DED3; }
+.calculus-visual-head small { color: #747B70; }
+.original-dot { background: #641E32; }
+.derivative-dot { background: #82917E; }
+.plot-axis { stroke: #B7BDB1; }
+.plot-original { stroke: #641E32; }
+.plot-derivative { stroke: #82917E; }
+.calculus-plot-empty { color: #747B70; }
+.limit-examples button { border-radius: 12px; }
+.limit-examples button strong { color: #292725; }
+.limit-examples button span { color: #747B70; }
+.critical-point-card {
+  border-color: #C9D7C7;
+  background: #EAF0E7;
+}
+.critical-point-card strong { color: #405D47; }
+.critical-point-card span, .critical-point-card small { color: #536C59; }
+.critical-point-card .critical-point-kind { color: #641E32; }
+.critical-raw-response { border-color: #D9DED3; color: #747B70; }
+.critical-raw-response summary { color: #641E32; }
+.critical-raw-response pre {
+  border-color: #D9DED3;
+  background: #F0F2EB;
+  color: #4F584D;
+}
+@media (max-width: 760px) {
+  .topbar { background: rgba(255,252,245,.96); }
+}
