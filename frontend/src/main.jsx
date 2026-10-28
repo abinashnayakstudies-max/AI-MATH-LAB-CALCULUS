@@ -94,7 +94,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     while (mount.firstChild) mount.removeChild(mount.firstChild);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#08090d");
+    scene.background = new THREE.Color("#0a080c");
 
     const camera = new THREE.PerspectiveCamera(40, mount.clientWidth / Math.max(mount.clientHeight, 1), 0.1, 2000);
     camera.position.set(0.6, 3.2, 11.0);
@@ -119,7 +119,7 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     const group = new THREE.Group();
     scene.add(group);
 
-    // Subtle background ambient particle starfield
+    // Subtle background ambient particle starfield (organic sage-grey stardust)
     const particleCount = 200;
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
@@ -130,10 +130,10 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     }
     particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
     const particleMaterial = new THREE.PointsMaterial({
-      color: 0x38bdf8,
+      color: 0x8a9e8c,
       size: 0.06,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.25,
       blending: THREE.AdditiveBlending
     });
     scene.add(new THREE.Points(particleGeometry, particleMaterial));
@@ -189,8 +189,8 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     const mapY = val => ((val - yMin) / Math.max(yRange, 1e-12) - 0.5) * worldH;
     const x0 = mapX(0), y0 = mapY(0);
 
-    // Grid
-    const gridColor = 0x181e2b;
+    // Grid (subtle warm dark noir)
+    const gridColor = 0x221a22;
     for (let i = 0; i <= 8; i++) {
       const gx = -worldW / 2 + (worldW * i) / 8;
       addLine([new THREE.Vector3(gx, -worldH / 2, -0.06), new THREE.Vector3(gx, worldH / 2, -0.06)], gridColor, 0.5);
@@ -200,16 +200,16 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
       addLine([new THREE.Vector3(-worldW / 2, gy, -0.06), new THREE.Vector3(worldW / 2, gy, -0.06)], gridColor, 0.5);
     }
 
-    // Axes
-    const xAxisColor = 0x38bdf8;
-    const yAxisColor = 0x34d399;
-    const zAxisColor = 0xf59e0b;
+    // Axes: Burgundy X, Sage Y, Cream Z
+    const xAxisColor = 0x942646;
+    const yAxisColor = 0x8a9e8c;
+    const zAxisColor = 0xd4c7b5;
     addLine([new THREE.Vector3(-worldW / 2, y0, 0), new THREE.Vector3(worldW / 2, y0, 0)], xAxisColor, 0.9);
     addLine([new THREE.Vector3(x0, -worldH / 2, 0), new THREE.Vector3(x0, worldH / 2, 0)], yAxisColor, 0.9);
     addLine([new THREE.Vector3(x0, y0, -2.4), new THREE.Vector3(x0, y0, 2.4)], zAxisColor, 0.65);
 
-    addText("X Axis", new THREE.Vector3(worldW / 2 - 0.4, y0 - 0.36, 0.08), "#7dd3fc", 0.3);
-    addText("Y [f(x)]", new THREE.Vector3(x0 + 0.65, worldH / 2 - 0.12, 0.08), "#6ee7b7", 0.3);
+    addText("X Axis", new THREE.Vector3(worldW / 2 - 0.4, y0 - 0.36, 0.08), "#e07a93", 0.3);
+    addText("Y [f(x)]", new THREE.Vector3(x0 + 0.65, worldH / 2 - 0.12, 0.08), "#a3b5a5", 0.3);
 
     // Ticks
     const tickCount = 6;
@@ -217,34 +217,35 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
       const t = i / tickCount;
       const xv = xMin + t * xRange, xp = mapX(xv);
       addLine([new THREE.Vector3(xp, y0 - 0.07, 0.02), new THREE.Vector3(xp, y0 + 0.07, 0.02)], xAxisColor, 0.8);
-      addText(fmt(xv), new THREE.Vector3(xp, y0 - 0.26, 0.04), "#94a3b8", 0.25);
+      addText(fmt(xv), new THREE.Vector3(xp, y0 - 0.26, 0.04), "#a3b5a5", 0.25);
 
       const yv = yMin + t * yRange, yp = mapY(yv);
       addLine([new THREE.Vector3(x0 - 0.07, yp, 0.02), new THREE.Vector3(x0 + 0.07, yp, 0.02)], yAxisColor, 0.8);
       if (i !== Math.round(tickCount / 2)) {
-        addText(fmt(yv), new THREE.Vector3(x0 - 0.52, yp, 0.04), "#94a3b8", 0.25);
+        addText(fmt(yv), new THREE.Vector3(x0 - 0.52, yp, 0.04), "#a3b5a5", 0.25);
       }
     }
 
     if (plot) {
       const valid = plot.pts.filter(p => Number.isFinite(p.y));
-      curveLine = addLine(valid.map(p => new THREE.Vector3(mapX(p.x), mapY(p.y), 0.12)), 0x38bdf8, 1);
+      // Main function curve in luminous warm cream
+      curveLine = addLine(valid.map(p => new THREE.Vector3(mapX(p.x), mapY(p.y), 0.12)), 0xf5efe6, 1);
 
       const nearest = target =>
         plot.pts.reduce((best, p) => (Math.abs(p.x - target) < Math.abs(best.x - target) ? p : best), plot.pts[0]);
       const pa = nearest(result.a), pb = nearest(result.b);
 
-      // Secant line
+      // Secant line in refined sage-grey
       addLine(
         [new THREE.Vector3(mapX(result.a), mapY(pa.y), 0.16), new THREE.Vector3(mapX(result.b), mapY(pb.y), 0.16)],
-        0xf59e0b,
+        0x8a9e8c,
         0.95
       );
 
       const c = result.hybrid_c ?? result.canonical_c;
       const pc = nearest(c);
 
-      // Tangent line at verified c
+      // Tangent line at verified c in radiant deep burgundy
       const tangentSpan = Math.min((plot.maxX - plot.minX) * 0.16, Math.max(result.b - result.a, 0.1) * 0.22);
       const t1 = Math.max(plot.minX, c - tangentSpan);
       const t2 = Math.min(plot.maxX, c + tangentSpan);
@@ -253,55 +254,55 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
           new THREE.Vector3(mapX(t1), mapY(pc.y + result.secant_slope * (t1 - c)), 0.2),
           new THREE.Vector3(mapX(t2), mapY(pc.y + result.secant_slope * (t2 - c)), 0.2)
         ],
-        0xc084fc,
+        0xc23b60,
         1
       );
 
-      // Verified MVT Point
+      // Verified MVT Point in glowing burgundy
       const verifiedSphere = new THREE.Mesh(
         new THREE.SphereGeometry(0.12, 24, 24),
-        new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 1.2 })
+        new THREE.MeshStandardMaterial({ color: 0x942646, emissive: 0x781d39, emissiveIntensity: 1.5 })
       );
       verifiedSphere.position.set(mapX(c), mapY(pc.y), 0.24);
       group.add(verifiedSphere);
 
-      addLine([new THREE.Vector3(mapX(c), y0, 0.18), new THREE.Vector3(mapX(c), mapY(pc.y), 0.18)], 0x38bdf8, 0.65);
-      addText(`Verified c = ${fmt(c)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.36, 0.28), "#7dd3fc", 0.28);
+      addLine([new THREE.Vector3(mapX(c), y0, 0.18), new THREE.Vector3(mapX(c), mapY(pc.y), 0.18)], 0xc23b60, 0.7);
+      addText(`Verified c = ${fmt(c)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.36, 0.28), "#f5efe6", 0.28);
 
-      // Other roots
+      // Other roots in sage-grey
       (result.mvt_points || []).forEach(root => {
         if (Math.abs(root - c) < 1e-5) return;
         const rp = nearest(root);
         const marker = new THREE.Mesh(
           new THREE.SphereGeometry(0.08, 16, 16),
-          new THREE.MeshBasicMaterial({ color: 0x93c5fd })
+          new THREE.MeshBasicMaterial({ color: 0xa3b5a5 })
         );
         marker.position.set(mapX(root), mapY(rp.y), 0.22);
         group.add(marker);
       });
 
-      // AI predicted point
+      // AI predicted point in caramel amber
       if (Number.isFinite(result.ml_c)) {
         const mp = nearest(result.ml_c);
         const aiMarker = new THREE.Mesh(
           new THREE.SphereGeometry(0.1, 20, 20),
-          new THREE.MeshBasicMaterial({ color: 0xf59e0b })
+          new THREE.MeshBasicMaterial({ color: 0xd4a373 })
         );
         aiMarker.position.set(mapX(result.ml_c), mapY(mp.y), 0.26);
         group.add(aiMarker);
-        addText(`AI c = ${fmt(result.ml_c)}`, new THREE.Vector3(mapX(result.ml_c), mapY(mp.y) + 0.34, 0.3), "#fde68a", 0.25);
+        addText(`AI c = ${fmt(result.ml_c)}`, new THREE.Vector3(mapX(result.ml_c), mapY(mp.y) + 0.34, 0.3), "#f5efe6", 0.25);
       }
 
-      // Pinned coordinate
+      // Pinned coordinate in sage-grey
       if (inspectX != null && inspectValue != null && Number.isFinite(inspectX) && Number.isFinite(inspectValue)) {
         const pinMesh = new THREE.Mesh(
           new THREE.SphereGeometry(0.09, 20, 20),
-          new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 0.9 })
+          new THREE.MeshStandardMaterial({ color: 0x8a9e8c, emissive: 0x5a6d5c, emissiveIntensity: 1.0 })
         );
         pinMesh.position.set(mapX(inspectX), mapY(inspectValue), 0.28);
         group.add(pinMesh);
-        addLine([new THREE.Vector3(mapX(inspectX), y0, 0.2), new THREE.Vector3(mapX(inspectX), mapY(inspectValue), 0.2)], 0x10b981, 0.7);
-        addText(`(${fmt(inspectX)}, ${fmt(inspectValue)})`, new THREE.Vector3(mapX(inspectX), mapY(inspectValue) + 0.32, 0.32), "#6ee7b7", 0.26);
+        addLine([new THREE.Vector3(mapX(inspectX), y0, 0.2), new THREE.Vector3(mapX(inspectX), mapY(inspectValue), 0.2)], 0x8a9e8c, 0.7);
+        addText(`(${fmt(inspectX)}, ${fmt(inspectValue)})`, new THREE.Vector3(mapX(inspectX), mapY(inspectValue) + 0.32, 0.32), "#f5efe6", 0.26);
       }
     }
 
@@ -534,13 +535,13 @@ function RiemannAreaPlot({ rectangles, plotPoints, a, b }) {
         return (
           <g key={idx} className="riemann-bar-group">
             <rect x={x1} y={yPos} width={rectW} height={Math.max(rectH, 1)} className="riemann-rect" />
-            <line x1={x1} y1={zeroY} x2={x1} y2={scaleY(rect.height)} stroke="rgba(56, 189, 248, 0.4)" strokeWidth="1" />
-            <line x1={x2} y1={zeroY} x2={x2} y2={scaleY(rect.height)} stroke="rgba(56, 189, 248, 0.4)" strokeWidth="1" />
-            <line x1={x1} y1={scaleY(rect.height)} x2={x2} y2={scaleY(rect.height)} stroke="#38bdf8" strokeWidth="1.5" />
+            <line x1={x1} y1={zeroY} x2={x1} y2={scaleY(rect.height)} stroke="rgba(194, 59, 96, 0.4)" strokeWidth="1" />
+            <line x1={x2} y1={zeroY} x2={x2} y2={scaleY(rect.height)} stroke="rgba(194, 59, 96, 0.4)" strokeWidth="1" />
+            <line x1={x1} y1={scaleY(rect.height)} x2={x2} y2={scaleY(rect.height)} stroke="#c23b60" strokeWidth="1.5" />
           </g>
         );
       })}
-      <path d={curvePath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+      <path d={curvePath} fill="none" stroke="#f5efe6" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -571,8 +572,8 @@ function TaylorPlot({ originalPoints, taylorPoints }) {
     <svg className="calculus-plot" viewBox={`0 0 ${width} ${height}`}>
       {zeroY !== null && <line x1={pad} y1={zeroY} x2={width - pad} y2={zeroY} className="plot-axis" />}
       {zeroX !== null && <line x1={zeroX} y1={pad} x2={zeroX} y2={height - pad} className="plot-axis" />}
-      <polyline points={line(originalPoints)} stroke="#38bdf8" strokeWidth="2.5" fill="none" />
-      <polyline points={line(taylorPoints)} stroke="#c084fc" strokeWidth="2.5" strokeDasharray="6 4" fill="none" />
+      <polyline points={line(originalPoints)} stroke="#f5efe6" strokeWidth="2.5" fill="none" />
+      <polyline points={line(taylorPoints)} stroke="#c23b60" strokeWidth="2.5" strokeDasharray="6 4" fill="none" />
     </svg>
   );
 }
