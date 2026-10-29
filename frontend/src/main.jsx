@@ -52,10 +52,25 @@ import "./style.css";
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
 
 // ----------------------------------------------------
+// Safe KaTeX Helper (Never emits raw red KaTeX parse error HTML)
+// ----------------------------------------------------
+function renderSafeKatex(tex, isBlock = false) {
+  try {
+    return katex.renderToString(tex, {
+      displayMode: isBlock,
+      throwOnError: true
+    });
+  } catch (err) {
+    return null;
+  }
+}
+
+// ----------------------------------------------------
 // KaTeX Math Rendering Component (Synchronous & Bundled)
 // ----------------------------------------------------
 function MathFormula({ tex, block = false }) {
   const content = String(tex || "");
+  if (!content) return null;
 
   // If text contains $...$ or $$...$$ delimiters, parse mixed prose + LaTeX
   if (content.includes("$")) {
@@ -65,20 +80,20 @@ function MathFormula({ tex, block = false }) {
         {parts.map((part, idx) => {
           if (part.startsWith("$$") && part.endsWith("$$")) {
             const math = part.slice(2, -2).trim();
-            try {
-              const html = katex.renderToString(math, { displayMode: true, throwOnError: false });
-              return <span key={idx} dangerouslySetInnerHTML={{ __html: html }} />;
-            } catch (e) {
-              return <span key={idx}>{math}</span>;
-            }
+            const html = renderSafeKatex(math, true);
+            return html ? (
+              <span key={idx} dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <span key={idx} className="math-fallback">{math}</span>
+            );
           } else if (part.startsWith("$") && part.endsWith("$")) {
             const math = part.slice(1, -1).trim();
-            try {
-              const html = katex.renderToString(math, { displayMode: false, throwOnError: false });
-              return <span key={idx} dangerouslySetInnerHTML={{ __html: html }} />;
-            } catch (e) {
-              return <span key={idx}>{math}</span>;
-            }
+            const html = renderSafeKatex(math, false);
+            return html ? (
+              <span key={idx} dangerouslySetInnerHTML={{ __html: html }} />
+            ) : (
+              <span key={idx} className="math-fallback">{math}</span>
+            );
           } else {
             return <span key={idx}>{part}</span>;
           }
@@ -87,23 +102,131 @@ function MathFormula({ tex, block = false }) {
     );
   }
 
-  const html = useMemo(() => {
-    if (!content) return "";
-    try {
-      return katex.renderToString(content, {
-        displayMode: block,
-        throwOnError: false
-      });
-    } catch (e) {
-      return content;
-    }
-  }, [content, block]);
+  // If there are no $ delimiters, check if this is plain prose rather than LaTeX math
+  const isLikelyProse =
+    !content.includes("\\") &&
+    !content.includes("^") &&
+    !content.includes("_") &&
+    content.includes(" ") &&
+    !content.includes("=");
+
+  if (isLikelyProse) {
+    return <span className={block ? "math-block" : "math-inline"}>{content}</span>;
+  }
+
+  const html = renderSafeKatex(content, block);
+  if (html) {
+    return (
+      <span
+        className={block ? "math-block" : "math-inline"}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
 
   return (
-    <span
-      className={block ? "math-block" : "math-inline"}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <span className={block ? "math-block math-fallback" : "math-inline math-fallback"}>
+      {content}
+    </span>
+  );
+}
+
+// ----------------------------------------------------
+// Inline Rich Text Parser (Math + Bold + Code + Plain Text)
+// ----------------------------------------------------
+function InlineRichText({ text }) {
+  if (!text) return null;
+  const parts = String(text).split(/(\s*\$[^\$]+?\$\s*|\*\*[^*]+?\*\*|`[^`]+?`)/g);
+
+  return (
+    <>
+      {parts.map((part, idx) => {
+        if (!part) return null;
+        const trimmed = part.trim();
+        if (trimmed.startsWith("$") && trimmed.endsWith("$") && trimmed.length > 2) {
+          const math = trimmed.slice(1, -1).trim();
+          const html = renderSafeKatex(math, false);
+          return html ? (
+            <span key={idx} className="inline-math" dangerouslySetInnerHTML={{ __html: html }} />
+          ) : (
+            <span key={idx} className="inline-math-fallback">{math}</span>
+          );
+        } else if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+          const bold = part.slice(2, -2);
+          return <strong key={idx} className="rich-bold">{bold}</strong>;
+        } else if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+          const code = part.slice(1, -1);
+          return <code key={idx} className="rich-code">{code}</code>;
+        } else {
+          return <span key={idx}>{part}</span>;
+        }
+      })}
+    </>
+  );
+}
+
+// ----------------------------------------------------
+// Full Rich Math & Markdown Text Component
+// ----------------------------------------------------
+function RichMathText({ content }) {
+  if (!content) return null;
+  const str = String(content).replace(/\r\n/g, "\n");
+  const blocks = str.split(/(\$\$[\s\S]*?\$\$)/g);
+
+  return (
+    <div className="rich-math-content">
+      {blocks.map((block, bIdx) => {
+        if (!block) return null;
+        if (block.startsWith("$$") && block.endsWith("$$")) {
+          const math = block.slice(2, -2).trim();
+          const html = renderSafeKatex(math, true);
+          return html ? (
+            <div key={bIdx} className="rich-math-display" dangerouslySetInnerHTML={{ __html: html }} />
+          ) : (
+            <div key={bIdx} className="rich-math-display fallback">
+              <code>{math}</code>
+            </div>
+          );
+        }
+
+        const paras = block.split(/\n\s*\n/);
+        return (
+          <div key={bIdx} className="rich-text-block">
+            {paras.map((p, pIdx) => {
+              const lines = p.split("\n").filter((l) => l.trim().length > 0);
+              if (lines.length === 0) return null;
+
+              const hasBullets = lines.some((l) => /^\s*[-*]\s+/.test(l));
+              if (hasBullets) {
+                return (
+                  <ul key={pIdx} className="rich-bullet-list">
+                    {lines.map((line, lIdx) => {
+                      const cleanLine = line.replace(/^\s*[-*]\s+/, "");
+                      return (
+                        <li key={lIdx} className="rich-bullet-item">
+                          <InlineRichText text={cleanLine} />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              }
+
+              return (
+                <p key={pIdx} className="rich-para">
+                  {lines.map((line, lIdx) => (
+                    <React.Fragment key={lIdx}>
+                      <InlineRichText text={line} />
+                      {lIdx < lines.length - 1 && <br />}
+                    </React.Fragment>
+                  ))}
+                </p>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -3780,7 +3903,7 @@ function AICopilotView({ onNavigate, initialFormula }) {
 
             <div className="chat-bubble-content">
               <div className="chat-text">
-                <MathFormula tex={m.text} />
+                <RichMathText content={m.text} />
               </div>
 
               {/* Step Breakdown Cards */}
@@ -3942,7 +4065,7 @@ function FloatingAICopilot({ onNavigate }) {
           <div className="floating-card-body">
             {quickMessages.map((m, i) => (
               <div key={i} className={`floating-msg ${m.sender}`}>
-                <MathFormula tex={m.text} />
+                <RichMathText content={m.text} />
                 {m.actions && (
                   <div className="floating-actions">
                     {m.actions.map((act, aIdx) => (

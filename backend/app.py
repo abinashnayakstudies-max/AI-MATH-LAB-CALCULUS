@@ -1740,7 +1740,7 @@ def ai_analyze_math(req: AIAnalyzeRequest):
             else:
                 reply = (
                     f"**{persona_name}:** {tone_greeting}\n\n"
-                    "I am your personalized AI Math Copilot, connected to the exact SymPy computational engine and 10 interactive physics & math laboratories.\n\n"
+                    "I am your personalized AI Math Copilot, connected to the exact SymPy computational engine and 10 interactive physics and math laboratories.\n\n"
                     "You can ask me to calculate derivatives, integrals, limits, critical points, LTI stability proofs, or Fourier harmonics, or ask for conceptual explanations with step-by-step KaTeX proofs!"
                 )
                 suggested_prompts = [
