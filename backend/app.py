@@ -1276,6 +1276,202 @@ def verify_practice_answer(req: VerifyAnswerRequest):
     }
 
 
+
+# ========================================================
+# LTI SYSTEM ANALYZER & FOURIER ANALYSIS LAB ENDPOINTS
+# ========================================================
+
+LTI_SYSTEM_CATALOG = {
+    "delay": {
+        "id": "delay",
+        "name": "Ideal Delay / Shift Operator",
+        "equation_latex": "y[n] = x[n - 2] \\quad \\text{or} \\quad y(t) = x(t - 1)",
+        "linear": True,
+        "time_invariant": True,
+        "causal": True,
+        "stable": True,
+        "memory": "Dynamic (Memory Required)",
+        "impulse_response": "h[n] = \\delta[n - 2]",
+        "step_response": "s[n] = u[n - 2]",
+        "linearity_proof": "T\\{a x_1 + b x_2\\} = a x_1[n - 2] + b x_2[n - 2] = a y_1[n] + b y_2[n]. Homogeneity and additivity hold strictly.",
+        "time_invariance_proof": "Delay input by k: x_k[n] = x[n - k] \\implies T\\{x_k[n]\\} = x[n - k - 2] = y[n - k]. Identical to delayed output.",
+        "causality_proof": "Output at time index n depends exclusively on past input at n - 2. No future samples are referenced.",
+        "stability_proof": "\\sum_{n=-\\infty}^\\infty |h[n]| = |\\delta[0]| = 1 < \\infty. The impulse response is absolutely summable, hence strictly BIBO stable."
+    },
+    "accumulator": {
+        "id": "accumulator",
+        "name": "Accumulator / Discrete Integrator",
+        "equation_latex": "y[n] = \\sum_{k=-\\infty}^n x[k] \\quad \\text{or} \\quad y(t) = \\int_{-\\infty}^t x(\\tau) d\\tau",
+        "linear": True,
+        "time_invariant": True,
+        "causal": True,
+        "stable": False,
+        "memory": "Dynamic (Infinite Memory)",
+        "impulse_response": "h[n] = u[n]",
+        "step_response": "s[n] = (n + 1)u[n]",
+        "linearity_proof": "The summation operator is linear: \\sum (a x_1 + b x_2) = a \\sum x_1 + b \\sum x_2. Superposition holds.",
+        "time_invariance_proof": "Shifting input x by k yields \\sum_{m=-\\infty}^n x[m - k] = \\sum_{r=-\\infty}^{n - k} x[r] = y[n - k]. Time-invariant.",
+        "causality_proof": "Summation upper bound is the present sample index n (k \\le n). Output never relies on future indices k > n.",
+        "stability_proof": "\\sum_{n=-\\infty}^\\infty |h[n]| = \\sum_{n=0}^\\infty 1 = \\infty. Impulse response is NOT summable. A bounded unit step x[n] = u[n] produces an unbounded ramp y[n] = (n + 1) \\to \\infty. System is BIBO UNSTABLE."
+    },
+    "moving_average": {
+        "id": "moving_average",
+        "name": "3-Point Moving Average Filter",
+        "equation_latex": "y[n] = \\frac{1}{3} \\big(x[n] + x[n - 1] + x[n - 2]\\big)",
+        "linear": True,
+        "time_invariant": True,
+        "causal": True,
+        "stable": True,
+        "memory": "Dynamic (Finite Memory / FIR)",
+        "impulse_response": "h[n] = \\frac{1}{3} \\big(\\delta[n] + \\delta[n - 1] + \\delta[n - 2]\\big)",
+        "step_response": "s[n] = \\{0, \\frac{1}{3}, \\frac{2}{3}, 1, 1, \\dots\\}",
+        "linearity_proof": "Linear weighted sum of input samples: T\\{a x_1 + b x_2\\} = a y_1[n] + b y_2[n]. Superposition holds.",
+        "time_invariance_proof": "All filter coefficients are constant scalars. Shifting input by n_0 shifts all components identically.",
+        "causality_proof": "Output at n depends only on current sample x[n] and past samples x[n-1], x[n-2].",
+        "stability_proof": "\\sum_{n} |h[n]| = \\frac{1}{3} + \\frac{1}{3} + \\frac{1}{3} = 1 < \\infty. Absolutely summable, guaranteed BIBO stable."
+    },
+    "squarer": {
+        "id": "squarer",
+        "name": "Squarer (Non-Linear)",
+        "equation_latex": "y[n] = (x[n])^2 \\quad \\text{or} \\quad y(t) = [x(t)]^2",
+        "linear": False,
+        "time_invariant": True,
+        "causal": True,
+        "stable": True,
+        "memory": "Memoryless (Static)",
+        "impulse_response": "Undefined (Concept only applies to Linear systems)",
+        "step_response": "s[n] = u[n]",
+        "linearity_proof": "Let x_2[n] = 2 x_1[n]. Then T\\{x_2\\} = (2 x_1)^2 = 4 x_1^2 \\neq 2 y_1[n]. Homogeneity fails. System is NON-LINEAR.",
+        "time_invariance_proof": "T\\{x[n - k]\\} = (x[n - k])^2 = y[n - k]. Shift in input produces identical shift in output.",
+        "causality_proof": "Output at time n depends strictly on input at the exact same instant n. Memoryless and strictly causal.",
+        "stability_proof": "If |x[n]| \\le B_x < \\infty, then |y[n]| = |x[n]|^2 \\le B_x^2 < \\infty. Every bounded input produces a bounded output."
+    },
+    "time_compressor": {
+        "id": "time_compressor",
+        "name": "Time Compressor / Downsampler (Time-Varying & Non-Causal)",
+        "equation_latex": "y[n] = x[2n] \\quad \\text{or} \\quad y(t) = x(2t)",
+        "linear": True,
+        "time_invariant": False,
+        "causal": False,
+        "stable": True,
+        "memory": "Dynamic",
+        "impulse_response": "Time-varying kernel h[n, k]",
+        "step_response": "s[n] = u[2n] = u[n]",
+        "linearity_proof": "T\\{a x_1 + b x_2\\} = a x_1[2n] + b x_2[2n] = a y_1[n] + b y_2[n]. Superposition holds.",
+        "time_invariance_proof": "Let x_k[n] = x[n - 1]. Then T\\{x_k\\} = x[2n - 1]. But y[n - 1] = x[2(n - 1)] = x[2n - 2]. Since x[2n - 1] \\neq x[2n - 2], TIME-INVARIANCE FAILS.",
+        "causality_proof": "For positive index n = 2, output is y[2] = x[4], which requires future input sample 4. System is NON-CAUSAL.",
+        "stability_proof": "If |x[n]| \\le B < \\infty, then |y[n]| = |x[2n]| \\le B < \\infty. Bounded input produces bounded output."
+    }
+}
+
+
+class LTIAnalyzeRequest(BaseModel):
+    system_id: str = "delay"
+    domain: str = "discrete"
+
+
+@app.post("/signals/lti")
+def analyze_lti_system(req: LTIAnalyzeRequest):
+    sys_info = LTI_SYSTEM_CATALOG.get(req.system_id, LTI_SYSTEM_CATALOG["delay"])
+    return {
+        "success": True,
+        "domain": req.domain,
+        "system": sys_info
+    }
+
+
+class FourierSeriesRequest(BaseModel):
+    waveform: str = "square"
+    harmonics: int = Field(5, ge=1, le=30)
+    fundamental_freq: float = Field(1.0, ge=0.1, le=10.0)
+    amplitude: float = Field(1.0, ge=0.1, le=10.0)
+
+
+@app.post("/signals/fourier")
+def calculate_fourier_series(req: FourierSeriesRequest):
+    try:
+        f0 = req.fundamental_freq
+        amp = req.amplitude
+        omega0 = 2 * np.pi * f0
+        period = 1.0 / f0
+        t_vals = np.linspace(-period, period, 321)
+
+        coeffs = []
+        reconstructed = np.zeros_like(t_vals)
+        exact = np.zeros_like(t_vals)
+
+        if req.waveform == "square":
+            mod_t = (t_vals + period / 2) % period - period / 2
+            exact = np.where(mod_t >= 0, amp, -amp)
+            formula_latex = "x(t) = \\frac{4A}{\\pi} \\sum_{k=1,3,5,\\dots}^{2N-1} \\frac{\\sin(k \\omega_0 t)}{k}"
+            gibbs_note = "Gibbs Phenomenon: ~8.95% overshoot persists at jump discontinuities regardless of harmonic order N."
+
+            for idx, n in enumerate(range(1, 2 * req.harmonics, 2)):
+                b_n = (4 * amp) / (np.pi * n)
+                coeffs.append({
+                    "harmonic": n,
+                    "magnitude": round(float(b_n), 4),
+                    "phase": 0.0,
+                    "term": f"\\frac{{4A}}{{{n}\\pi}} \\sin({n}\\omega_0 t)"
+                })
+                reconstructed += b_n * np.sin(n * omega0 * t_vals)
+
+        elif req.waveform == "triangle":
+            mod_t = (t_vals + period / 2) % period - period / 2
+            exact = amp * (1 - 4 * np.abs(mod_t) / period)
+            formula_latex = "x(t) = \\frac{8A}{\\pi^2} \\sum_{k=1,3,5,\\dots}^{2N-1} \\frac{(-1)^{(k-1)/2}}{k^2} \\sin(k \\omega_0 t)"
+            gibbs_note = "Continuous everywhere: Rapid 1/k² harmonic decay; no Gibbs overshoot occurs."
+
+            for idx, k in enumerate(range(1, 2 * req.harmonics, 2)):
+                sign = (-1) ** ((k - 1) // 2)
+                b_k = (8 * amp * sign) / ((np.pi ** 2) * (k ** 2))
+                coeffs.append({
+                    "harmonic": k,
+                    "magnitude": round(float(abs(b_k)), 4),
+                    "phase": 0.0 if sign > 0 else round(np.pi, 3),
+                    "term": f"\\frac{{8A}}{{{k}^2\\pi^2}} \\sin({k}\\omega_0 t)"
+                })
+                reconstructed += b_k * np.sin(k * omega0 * t_vals)
+
+        elif req.waveform == "sawtooth":
+            mod_t = (t_vals + period / 2) % period - period / 2
+            exact = 2 * amp * (mod_t / period)
+            formula_latex = "x(t) = \\frac{2A}{\\pi} \\sum_{n=1}^N \\frac{(-1)^{n+1}}{n} \\sin(n \\omega_0 t)"
+            gibbs_note = "Contains step discontinuities: Demonstrates 1/n harmonic decay and persistent Gibbs ripples at period boundaries."
+
+            for n in range(1, req.harmonics + 1):
+                b_n = (2 * amp * ((-1) ** (n + 1))) / (np.pi * n)
+                coeffs.append({
+                    "harmonic": n,
+                    "magnitude": round(float(abs(b_n)), 4),
+                    "phase": 0.0 if b_n >= 0 else round(np.pi, 3),
+                    "term": f"\\frac{{2A}}{{{n}\\pi}} \\sin({n}\\omega_0 t)"
+                })
+                reconstructed += b_n * np.sin(n * omega0 * t_vals)
+        else:
+            return {"error": "Unsupported waveform. Choose square, triangle, or sawtooth."}
+
+        mse = float(np.mean((exact - reconstructed) ** 2))
+
+        return {
+            "success": True,
+            "waveform": req.waveform,
+            "harmonics_count": len(coeffs),
+            "fundamental_freq": req.fundamental_freq,
+            "amplitude": req.amplitude,
+            "formula_latex": formula_latex,
+            "gibbs_note": gibbs_note,
+            "mse_error": round(mse, 5),
+            "coefficients": coeffs,
+            "plot_points": [
+                {"t": round(float(t), 4), "exact": round(float(ex), 4), "reconstructed": round(float(rec), 4)}
+                for t, ex, rec in zip(t_vals, exact, reconstructed)
+            ]
+        }
+    except Exception as e:
+        return {"error": f"Fourier analysis error: {str(e)}"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

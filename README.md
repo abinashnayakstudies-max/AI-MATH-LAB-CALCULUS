@@ -1,135 +1,97 @@
-# AI Math Lab — Next-Generation Calculus Platform & 3D MVT Explorer
+# AI Math Lab — Next-Generation Calculus & Signals Computational Platform
 
-**AI Math Lab** is an interactive, modern computational mathematics application combining symbolic calculus, numerical methods, a trained PyTorch model, and rich 3D Three.js visualizations.
+**AI Math Lab** is an interactive, engineering-grade computational mathematics and signals platform combining exact symbolic math, rigorous numerical solvers, a trained PyTorch neural network, Three.js 3D WebGL visualizations, and real-time SVG signal processing laboratories.
+
+Built strictly according to the **AI Math Lab Master Blueprint** and styled in the **Rich Dark Noir** visual identity (Warm Cream `#F5EFE6`, Sage-Grey `#8A9E8C`, Deep Burgundy `#781D39` / Crimson `#C23B60`, and Velvety Noir `#0D0B0E`).
 
 ---
 
-## 🚀 Key Modules & Capabilities
+## 🌐 Live Deployments
 
+- **Frontend (Vercel):** [https://frontend-kappa-nine-hvdnx63cox.vercel.app/](https://frontend-kappa-nine-hvdnx63cox.vercel.app/)
+- **Backend API (Render):** [https://ai-math-lab-backend.onrender.com/](https://ai-math-lab-backend.onrender.com/)
+- **Interactive OpenAPI Docs:** [https://ai-math-lab-backend.onrender.com/docs](https://ai-math-lab-backend.onrender.com/docs)
+
+---
+
+## 🚀 Two Pillars + Curated Practice Solver
+
+### 📐 Pillar 1: Calculus Core
 1. **Generalized Mean Value Theorem (MVT) Explorer:**
-   - Interactive 3D/2D WebGL visualization (Three.js) with real-time coordinate inspection.
-   - Dual perspective: 3D orbit view vs. 2D flat planar orthographic projection.
-   - AI ML candidate estimation (`mvt_model_v4.pt`) + Brent numerical root verification.
-   - Dynamic tangent lines, secant slopes, and interactive click-to-pin coordinate evaluation.
-
+   - Interactive 3D WebGL (Three.js) orbit scene with flat 2D orthographic projection switch.
+   - Dual-engine verification: PyTorch deep learning candidate prediction (`mvt_model_v4.pt`) verified with Brent numerical root refinement.
+   - Secant slope alignment, dynamic tangent lines, and interactive click-to-pin coordinate evaluation.
 2. **Symbolic Calculus Engine:**
-   - 1st through 5th order derivatives ($f', f'', f''', \dots$) and indefinite/definite integrals via SymPy.
-   - Exact analytical LaTeX expressions and real-time dual curve previews.
-
+   - 1st through 5th order derivatives and indefinite/definite integrals with step-by-step KaTeX worked solutions.
 3. **Taylor & Maclaurin Series Expansions:**
-   - Dynamic polynomial order slider ($N = 1 \dots 10$) with step-by-step term breakdowns.
-   - Visual convergence comparison plot showing exact $f(x)$ vs. Taylor polynomial $P_N(x)$.
-
+   - Dynamic polynomial order slider ($N = 1 \dots 10$) with step-by-step coefficient table and convergence comparison curves.
 4. **Riemann Sums & Area Visualizer:**
-   - Definite integral approximation using Left, Right, Midpoint, and Trapezoidal rules.
-   - Live partition slider ($n = 4 \dots 50$) with geometric rectangle rendering and error quantification.
-
+   - Definite integral approximation using Left, Right, Midpoint, and Trapezoidal rules with interactive partition slider ($n = 4 \dots 50$).
 5. **Critical Points, Extrema & Inflections:**
-   - Stationary point detection, local maxima/minima classification via second derivative test.
-   - Global extrema on closed intervals $[a, b]$ and inflection points where $f''(x) = 0$.
-
+   - Stationary point detection, local maxima/minima via second-derivative test, global extrema on $[a, b]$, and inflection points.
 6. **Limits & Continuity:**
-   - One-sided ($x \to a^-, x \to a^+$) and two-sided limits, limits at infinity ($\pm \infty$), and continuity testing.
-
-7. **Smart Math Parser with Implicit Multiplication:**
-   - Write standard natural math like `2x`, `3sin(x)`, `x(x+1)`, `4e^x`, and `ln(x)` without requiring explicit multiplication asterisks (`*`).
+   - One-sided ($x 	o a^-, x 	o a^+$) and two-sided limits, limits at infinity ($\pm \infty$), and point continuity testing.
 
 ---
 
-## 🛠️ Project Structure
-
-```text
-ai-math-lab/
-├── backend/
-│   ├── app.py               # FastAPI server & mathematical engines
-│   ├── requirements.txt     # Python dependencies
-│   ├── test_backend.py      # Automated backend unit test suite
-│   ├── Dockerfile           # Production container build
-│   └── models/
-│       └── mvt_model_v4.pt  # Trained PyTorch MVT neural network
-├── frontend/
-│   ├── package.json         # React 18, Vite, Three.js, Lucide icons
-│   ├── index.html           # Modern typography & meta tags
-│   ├── vercel.json          # Vercel deployment configuration
-│   └── src/
-│       ├── main.jsx         # Full interactive client application
-│       └── style.css        # Cyber-scientific glassmorphic UI design
-├── render.yaml              # Render blueprint deployment config
-└── README.md
-```
+### 📡 Pillar 2: Signals & Systems Lab
+1. **Signal Explorer & Transformations:**
+   - **Dual-Domain Representation:** Continuous time ($t$) vector curves vs. Discrete time ($n$) authentic stem plots.
+   - **Signal Families:** Unit Step $u(t)$, Unit Impulse $\delta(t)$, Ramp $r(t)$, Rectangular Pulse $	ext{rect}(t/	au)$, Sinusoids, Decaying Exponential $e^{-lpha t}u(t)$, and Sinc pulse $	ext{sinc}(t)$.
+   - **Transformation Algebra:** Time shifting $t - t_0$, time scaling $a$, time reversal $t 	o -t$, and amplitude scaling $A$.
+   - **Energy Metric:** Evaluates $E = \int |x(t)|^2 dt$ or $\sum |x[n]|^2$.
+2. **4-Track Convolution Visualizer:**
+   - Continuous $(x * h)(t) = \int x(	au)h(t-	au)d	au$ and discrete $(x * h)[n] = \sum_k x[k]h[n-k]$ convolution.
+   - **Synchronized 2×2 Grid:** 1) Stationary Input $x$, 2) Sliding Kernel $h(t - 	au)$, 3) Overlap Product with shaded integral area, and 4) Output Waveform $y(t)$ with active cursor.
+   - Interactive sweep player with Play/Pause animation and real-time instantaneous readout.
+3. **LTI System Analyzer:**
+   - System catalog: Ideal Delay, Accumulator/Integrator, Moving Average, Squarer (Non-Linear test), and Time Scaler (Time-Varying/Non-Causal test).
+   - **Formal Proofs:** Detailed mathematical derivation cards for Linearity, Time-Invariance, Causality, and BIBO Stability.
+   - Impulse response $h$ and step response $s$ characterization.
+4. **Fourier Analysis Lab:**
+   - Harmonic synthesis for Square, Triangle, and Sawtooth waves with harmonics slider $N \in [1, 25]$.
+   - **Dual SVG Visualization:** Time-domain approximation curve with visible **Gibbs phenomenon** ripples vs. Frequency-domain magnitude line spectrum bar chart ($|b_n|$ vs. $n$).
+   - Exact KaTeX series formulas and Mean Squared Error ($MSE$).
 
 ---
 
-## 💻 Local Development
-
-### Backend (Python FastAPI)
-
-From the `backend` directory:
-
-```bash
-# Set up virtual environment
-python -m venv .venv
-
-# Activate environment:
-# Windows PowerShell:
-.venv\Scripts\Activate.ps1
-# macOS/Linux:
-# source .venv/bin/activate
-
-# Install dependencies and run
-pip install -r requirements.txt
-uvicorn app:app --reload --host 127.0.0.1 --port 8000
-```
-
-- API Docs: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/health`
-- Run automated unit tests:
-  ```bash
-  python test_backend.py
-  ```
-
-### Frontend (React + Vite)
-
-From the `frontend` directory:
-
-```bash
-npm install
-npm run dev
-```
-
-Create `.env.local` if pointing to a remote backend:
-```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
+### 🎓 Pillar 3: Practice Mode & Step-by-Step Solver
+- Curated multi-tier problem sets across Calculus and Signals & Systems.
+- Difficulty tiers: *Fundamentals*, *Standard*, and *Challenge*.
+- Pedagogical hint drawer without spoiling the answer.
+- Instant answer verification against backend `/practice/verify`.
+- Expandable step-by-step worked solutions with full mathematical rigor in KaTeX.
 
 ---
 
-## 🌐 Production Deployment
+## 🔗 True URL Deep-Link Hash Routing
 
-### 1. Backend on Render (Web Service or Docker)
-The repository includes a ready-to-deploy `render.yaml` blueprint:
-- **Runtime:** Python 3.11.9 (or Docker via `backend/Dockerfile`)
-- **Build Command:** `pip install -r requirements.txt`
-- **Start Command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- **Health Check Path:** `/health`
-
-### 2. Frontend on Vercel
-1. Import the repository into Vercel.
-2. Select **Vite** as framework and set **Root Directory** to `frontend`.
-3. Add environment variable:
-   `VITE_API_BASE_URL=https://your-backend.onrender.com`
-4. Deploy!
+The application features full browser hash routing supporting direct navigation, browser Back/Forward history, and reload persistence:
+- `/#/mvt` — Mean Value Theorem 3D Explorer
+- `/#/calculus` — Symbolic Calculus Engine
+- `/#/taylor` — Taylor & Maclaurin Series
+- `/#/riemann` — Riemann Sums Area Visualizer
+- `/#/critical` — Critical Points & Extrema
+- `/#/limits` — Limits & Continuity
+- `/#/signals/explorer` — Signal Explorer & Transformations
+- `/#/signals/convolution` — Convolution Visualizer
+- `/#/signals/lti` — LTI System Analyzer
+- `/#/signals/fourier` — Fourier Analysis Lab
+- `/#/practice` — Curated Practice Mode & Step-by-Step Solver
+- `/#/about` — System Architecture & Standards
 
 ---
 
-## 📡 API Endpoints
+## 🛡️ Mathematical Reliability Protocol
 
-- `GET /` — API service overview and available endpoints
-- `GET /health` — Health check & model status
-- `POST /function-value` — Evaluate $f(x)$ at $x$
-- `POST /mvt` — Mean Value Theorem numerical & AI solver
-- `POST /calculus` — Symbolic differentiation and integration
-- `POST /taylor` — Taylor series polynomial expansion & curve sampling
-- `POST /riemann-sum` — Numerical integration & partition rectangles
-- `POST /critical-points` — Stationary points, extrema, and inflections
-- `POST /limits` — One-sided/two-sided limits and continuity check
+1. **AST Math Parser:** Restricted expression parsing with implicit multiplication (`2x`, `3sin(x)`, `x(x+1)`) and strict security checks. No `eval()` or `exec()`.
+2. **Hybrid Verification:** Critical ML candidate estimates are mathematically verified and polished by numerical solvers (e.g. Brent root finding).
+3. **No Keystroke Auto-Calculation:** Heavy calculations execute only on explicit button click or pressing <kbd>Enter</kbd> to avoid unnecessary computation and UI interruption.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Backend:** FastAPI, Pydantic, SymPy, NumPy, SciPy, PyTorch, Uvicorn.
+- **Frontend:** React 18, Vite, Three.js 3D WebGL, KaTeX, Lucide Icons.
+- **CI/CD:** Vercel (Frontend), Render (Backend).

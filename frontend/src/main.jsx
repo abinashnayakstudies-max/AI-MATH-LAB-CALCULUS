@@ -1886,12 +1886,735 @@ function PracticeSolver() {
 
 // Main Application Component
 // ----------------------------------------------------
+
+function LTIAnalyzer() {
+  const [systemId, setSystemId] = useState("delay");
+  const [domain, setDomain] = useState("discrete");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [openProofs, setOpenProofs] = useState({});
+
+  const fetchLti = useCallback(async (sysId, dom) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/signals/lti`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system_id: sysId, domain: dom })
+      });
+      const d = await res.json();
+      setData(d);
+    } catch {
+      setData({ error: "LTI Analyzer service connection error." });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLti(systemId, domain);
+  }, [systemId, domain, fetchLti]);
+
+  const toggleProof = key => {
+    setOpenProofs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const sys = data?.system;
+
+  return (
+    <div className="signals-workspace">
+      {/* System Selection & Block Diagram */}
+      <aside className="controls panel">
+        <div className="panel-title">
+          <span>01</span>
+          <div>
+            <h2>System Selector</h2>
+            <p>Choose an LTI or non-LTI system.</p>
+          </div>
+        </div>
+
+        <div className="calculus-field">
+          <label>SYSTEM MODEL</label>
+          <select value={systemId} onChange={e => setSystemId(e.target.value)}>
+            <option value="delay">Ideal Delay: y[n] = x[n - 2]</option>
+            <option value="accumulator">Accumulator: y[n] = ∑ x[k]</option>
+            <option value="moving_average">Moving Average: y[n] = ⅓(x[n]+x[n-1]+x[n-2])</option>
+            <option value="squarer">Squarer: y[n] = (x[n])² (Non-Linear)</option>
+            <option value="time_compressor">Time Scaler: y[n] = x[2n] (Time-Varying)</option>
+          </select>
+        </div>
+
+        <div className="calculus-field">
+          <label>REPRESENTATION</label>
+          <div className="option-row">
+            <button
+              type="button"
+              className={domain === "discrete" ? "active" : ""}
+              onClick={() => setDomain("discrete")}
+            >
+              Discrete [n]
+            </button>
+            <button
+              type="button"
+              className={domain === "continuous" ? "active" : ""}
+              onClick={() => setDomain("continuous")}
+            >
+              Continuous (t)
+            </button>
+          </div>
+        </div>
+
+        {/* System Block Diagram SVG */}
+        <div className="block-diagram-card" style={{ marginTop: "18px" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "8px" }}>
+            SYSTEM BLOCK DIAGRAM:
+          </span>
+          <svg viewBox="0 0 320 90" style={{ width: "100%", height: "auto", display: "block", background: "rgba(13, 11, 14, 0.7)", borderRadius: "var(--radius-sm)" }}>
+            <line x1="20" y1="45" x2="100" y2="45" stroke="#f5efe6" strokeWidth="2" markerEnd="url(#arrow)" />
+            <text x="50" y="36" fill="#f5efe6" fontSize="11" fontFamily="JetBrains Mono, monospace">x[n]</text>
+
+            <rect x="100" y="20" width="120" height="50" rx="8" fill="rgba(120, 29, 57, 0.3)" stroke="var(--accent-crimson)" strokeWidth="1.5" />
+            <text x="160" y="44" fill="#f5efe6" fontSize="12" fontWeight="700" textAnchor="middle" fontFamily="Inter, sans-serif">
+              {systemId === "delay" ? "z⁻² Delay" : systemId === "accumulator" ? "1/(1 - z⁻¹)" : systemId === "moving_average" ? "FIR Filter" : systemId === "squarer" ? "( • )²" : "Downsampler"}
+            </text>
+            <text x="160" y="58" fill="#a3b5a5" fontSize="10" textAnchor="middle">System T{'{•}'}</text>
+
+            <line x1="220" y1="45" x2="300" y2="45" stroke="#c23b60" strokeWidth="2" />
+            <polygon points="296,41 304,45 296,49" fill="#c23b60" />
+            <text x="250" y="36" fill="#c23b60" fontSize="11" fontFamily="JetBrains Mono, monospace">y[n]</text>
+          </svg>
+        </div>
+
+        <div className="method-note" style={{ marginTop: "16px" }}>
+          <CircleHelp size={15} />
+          <span>
+            Linear Time-Invariant (LTI) systems are completely characterized by their impulse response h.
+            If a system is non-linear or time-varying, convolution cannot represent its input-output mapping.
+          </span>
+        </div>
+      </aside>
+
+      {/* Property Cards Stage */}
+      <section className="visual-panel panel">
+        <div className="plot-header">
+          <div>
+            <span className="badge-tag">SYSTEM PROPERTY CLASSIFICATION</span>
+            <h2>{sys?.name ?? "LTI System Analyzer"}</h2>
+          </div>
+          <span className="drag-note">Click "View Proof" on any property to expand formal mathematical derivation</span>
+        </div>
+
+        {!sys ? (
+          <div className="result-empty">Loading system properties…</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "8px 0" }}>
+            {/* System Equation Banner */}
+            <div className="verified-box" style={{ background: "rgba(16, 13, 17, 0.8)", borderColor: "var(--border-subtle)" }}>
+              <span style={{ fontSize: "11px" }}>GOVERNING INPUT-OUTPUT RELATION</span>
+              <div style={{ marginTop: "6px" }}>
+                <MathFormula tex={sys.equation_latex} block={true} />
+              </div>
+            </div>
+
+            {/* 1. Linearity */}
+            <div className="property-card">
+              <div className="property-header">
+                <div>
+                  <strong>Linearity</strong>
+                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-dim)" }}>
+                    Satisfies homogeneity T{'{ax}'} = aT{'{x}'} and additivity T{'{x₁+x₂}'} = T{'{x₁}'} + T{'{x₂}'}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className={`difficulty-badge ${sys.linear ? "fundamentals" : "challenge"}`}>
+                    {sys.linear ? "Linear" : "Non-Linear"}
+                  </span>
+                  <button type="button" className="filter-btn" onClick={() => toggleProof("linear")}>
+                    {openProofs["linear"] ? "Hide Proof" : "View Proof"}
+                  </button>
+                </div>
+              </div>
+              {openProofs["linear"] && (
+                <div className="proof-drawer">
+                  <MathFormula tex={sys.linearity_proof} />
+                </div>
+              )}
+            </div>
+
+            {/* 2. Time-Invariance */}
+            <div className="property-card">
+              <div className="property-header">
+                <div>
+                  <strong>Time-Invariance</strong>
+                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-dim)" }}>
+                    Time shift in input produces identical time shift in output: T{'{x(t - t₀)}'} = y(t - t₀)
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className={`difficulty-badge ${sys.time_invariant ? "fundamentals" : "challenge"}`}>
+                    {sys.time_invariant ? "Time-Invariant" : "Time-Varying"}
+                  </span>
+                  <button type="button" className="filter-btn" onClick={() => toggleProof("time_invariant")}>
+                    {openProofs["time_invariant"] ? "Hide Proof" : "View Proof"}
+                  </button>
+                </div>
+              </div>
+              {openProofs["time_invariant"] && (
+                <div className="proof-drawer">
+                  <MathFormula tex={sys.time_invariance_proof} />
+                </div>
+              )}
+            </div>
+
+            {/* 3. Causality */}
+            <div className="property-card">
+              <div className="property-header">
+                <div>
+                  <strong>Causality</strong>
+                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-dim)" }}>
+                    Output at time t depends only on present and past inputs (t ≤ t₀); never on future inputs
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className={`difficulty-badge ${sys.causal ? "fundamentals" : "challenge"}`}>
+                    {sys.causal ? "Causal" : "Non-Causal"}
+                  </span>
+                  <button type="button" className="filter-btn" onClick={() => toggleProof("causal")}>
+                    {openProofs["causal"] ? "Hide Proof" : "View Proof"}
+                  </button>
+                </div>
+              </div>
+              {openProofs["causal"] && (
+                <div className="proof-drawer">
+                  <MathFormula tex={sys.causality_proof} />
+                </div>
+              )}
+            </div>
+
+            {/* 4. BIBO Stability */}
+            <div className="property-card">
+              <div className="property-header">
+                <div>
+                  <strong>BIBO Stability</strong>
+                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-dim)" }}>
+                    Bounded Input Bounded Output: Every finite input |x| ≤ B produces bounded output |y| &lt; ∞
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className={`difficulty-badge ${sys.stable ? "fundamentals" : "challenge"}`}>
+                    {sys.stable ? "BIBO Stable" : "Unstable"}
+                  </span>
+                  <button type="button" className="filter-btn" onClick={() => toggleProof("stable")}>
+                    {openProofs["stable"] ? "Hide Proof" : "View Proof"}
+                  </button>
+                </div>
+              </div>
+              {openProofs["stable"] && (
+                <div className="proof-drawer">
+                  <MathFormula tex={sys.stability_proof} />
+                </div>
+              )}
+            </div>
+
+            {/* 5. Memory */}
+            <div className="property-card">
+              <div className="property-header">
+                <div>
+                  <strong>Memory (Static vs Dynamic)</strong>
+                  <span style={{ display: "block", fontSize: "11px", color: "var(--text-dim)" }}>
+                    Memoryless if output depends strictly on instantaneous present value; Dynamic if state is required
+                  </span>
+                </div>
+                <span className="difficulty-badge standard">
+                  {sys.memory}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="plot-foot">
+          <span>Mathematical Reliability: Verified against Oppenheim &amp; Willsky LTI standard theorems</span>
+          <span>{sys ? `Classified as ${sys.linear && sys.time_invariant ? "Strict LTI System" : "General System"}` : "—"}</span>
+        </div>
+      </section>
+
+      {/* Impulse & Step Response Sidebar */}
+      <aside className="results panel">
+        <div className="panel-title">
+          <span>03</span>
+          <div>
+            <h2>Response Metrics</h2>
+            <p>Impulse response h &amp; step response s.</p>
+          </div>
+        </div>
+
+        {!sys ? (
+          <div className="result-empty">Select a system to inspect response characteristics.</div>
+        ) : (
+          <>
+            <div className="verified-box">
+              <span>IMPULSE RESPONSE h({domain === "discrete" ? "n" : "t"})</span>
+              <div style={{ marginTop: "6px" }}>
+                <MathFormula tex={sys.impulse_response} block={true} />
+              </div>
+            </div>
+
+            <div className="verified-box" style={{ borderColor: "rgba(138, 158, 140, 0.4)", background: "rgba(22, 28, 23, 0.4)" }}>
+              <span style={{ color: "var(--accent-sage)" }}>STEP RESPONSE s({domain === "discrete" ? "n" : "t"})</span>
+              <div style={{ marginTop: "6px" }}>
+                <MathFormula tex={sys.step_response} block={true} />
+              </div>
+            </div>
+
+            <div className="result-row highlight-row">
+              <span>Overall LTI Classification</span>
+              <b>{sys.linear && sys.time_invariant ? "Strict LTI" : "Non-LTI"}</b>
+            </div>
+            <div className="result-row">
+              <span>Stability Criterion</span>
+              <b>{sys.stable ? "∑ |h[n]| < ∞" : "∑ |h[n]| = ∞"}</b>
+            </div>
+            <div className="result-row">
+              <span>Memory Order</span>
+              <b>{sys.memory}</b>
+            </div>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+
+function FourierLab() {
+  const [waveform, setWaveform] = useState("square");
+  const [harmonics, setHarmonics] = useState(5);
+  const [fundamentalFreq, setFundamentalFreq] = useState(1.0);
+  const [amplitude, setAmplitude] = useState(1.0);
+  const [activeTab, setActiveTab] = useState("time"); // "time" | "frequency"
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const calculateFourier = useCallback(async (wf, nHarm, f0, amp) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/signals/fourier`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          waveform: wf,
+          harmonics: Number(nHarm),
+          fundamental_freq: Number(f0),
+          amplitude: Number(amp)
+        })
+      });
+      const d = await res.json();
+      setData(d);
+    } catch {
+      setData({ error: "Fourier analysis service connection error." });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    calculateFourier(waveform, harmonics, fundamentalFreq, amplitude);
+  }, [waveform, harmonics, fundamentalFreq, amplitude, calculateFourier]);
+
+  // SVG Time-Domain plot dimensions
+  const svgW = 740;
+  const svgH = 320;
+  const margin = { left: 50, right: 30, top: 25, bottom: 40 };
+  const plotW = svgW - margin.left - margin.right;
+  const plotH = svgH - margin.top - margin.bottom;
+
+  const pts = data?.plot_points || [];
+  const minT = pts.length ? Math.min(...pts.map(p => p.t)) : -1;
+  const maxT = pts.length ? Math.max(...pts.map(p => p.t)) : 1;
+  const minY = -1.6 * amplitude;
+  const maxY = 1.6 * amplitude;
+
+  const mapX = t => margin.left + ((t - minT) / (maxT - minT || 1)) * plotW;
+  const mapY = y => margin.top + ((maxY - y) / (maxY - minY || 1)) * plotH;
+  const yZero = mapY(0);
+
+  const exactPath = pts.reduce((acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${mapX(p.t).toFixed(1)} ${mapY(p.exact).toFixed(1)}`, "");
+  const reconPath = pts.reduce((acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${mapX(p.t).toFixed(1)} ${mapY(p.reconstructed).toFixed(1)}`, "");
+
+  // Frequency-domain bar chart
+  const coeffs = data?.coefficients || [];
+  const maxMag = coeffs.length ? Math.max(...coeffs.map(c => c.magnitude), 1e-4) : 1;
+
+  return (
+    <div className="signals-workspace">
+      {/* Fourier Controls Sidebar */}
+      <aside className="controls panel">
+        <div className="panel-title">
+          <span>01</span>
+          <div>
+            <h2>Fourier Controls</h2>
+            <p>Select periodic waveform and harmonics N.</p>
+          </div>
+        </div>
+
+        <div className="calculus-field">
+          <label>WAVEFORM TARGET</label>
+          <select value={waveform} onChange={e => setWaveform(e.target.value)}>
+            <option value="square">Square Wave (Odd Harmonics 1/n)</option>
+            <option value="triangle">Triangle Wave (Fast Decay 1/n²)</option>
+            <option value="sawtooth">Sawtooth Wave (All Harmonics 1/n)</option>
+          </select>
+        </div>
+
+        <div className="calculus-field">
+          <label>ACTIVE HARMONICS N = {harmonics}</label>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "4px" }}>
+            <input
+              type="range"
+              min="1"
+              max="25"
+              step="1"
+              value={harmonics}
+              onChange={e => setHarmonics(Number(e.target.value))}
+              style={{ flex: 1, accentColor: "var(--accent-crimson)", cursor: "pointer" }}
+            />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "13px", minWidth: "30px", textAlign: "right" }}>
+              {harmonics}
+            </span>
+          </div>
+        </div>
+
+        <div className="bounds">
+          <div>
+            <label>FREQUENCY f₀ (Hz)</label>
+            <input
+              type="number"
+              step="0.5"
+              min="0.5"
+              max="5"
+              value={fundamentalFreq}
+              onChange={e => setFundamentalFreq(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label>AMPLITUDE A</label>
+            <input
+              type="number"
+              step="0.5"
+              min="0.5"
+              max="5"
+              value={amplitude}
+              onChange={e => setAmplitude(Number(e.target.value))}
+            />
+          </div>
+        </div>
+
+        <button
+          className="primary-button"
+          onClick={() => calculateFourier(waveform, harmonics, fundamentalFreq, amplitude)}
+          disabled={loading}
+          style={{ marginTop: "8px" }}
+        >
+          <Play size={15} />
+          {loading ? "Synthesizing…" : "Synthesize Fourier Series"}
+        </button>
+
+        {/* Quick Harmonics Presets */}
+        <div className="presets-strip" style={{ marginTop: "16px" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase" }}>Quick Harmonics:</span>
+          <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+            <button type="button" className={`filter-btn ${harmonics === 1 ? "active" : ""}`} onClick={() => setHarmonics(1)}>N=1 (Fundamental)</button>
+            <button type="button" className={`filter-btn ${harmonics === 3 ? "active" : ""}`} onClick={() => setHarmonics(3)}>N=3</button>
+            <button type="button" className={`filter-btn ${harmonics === 7 ? "active" : ""}`} onClick={() => setHarmonics(7)}>N=7</button>
+            <button type="button" className={`filter-btn ${harmonics === 15 ? "active" : ""}`} onClick={() => setHarmonics(15)}>N=15</button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Plot Stage: Time Domain vs Frequency Domain */}
+      <section className="visual-panel panel">
+        <div className="plot-header">
+          <div>
+            <span className="badge-tag">FOURIER SYNTHESIS &amp; SPECTRUM</span>
+            <h2>{activeTab === "time" ? "Time-Domain Approximation f_N(t)" : "Frequency-Domain Line Spectrum |b_n|"}</h2>
+          </div>
+          <div className="option-row" style={{ margin: 0 }}>
+            <button
+              type="button"
+              className={activeTab === "time" ? "active" : ""}
+              onClick={() => setActiveTab("time")}
+            >
+              Time Domain
+            </button>
+            <button
+              type="button"
+              className={activeTab === "frequency" ? "active" : ""}
+              onClick={() => setActiveTab("frequency")}
+            >
+              Frequency Spectrum
+            </button>
+          </div>
+        </div>
+
+        {/* TIME DOMAIN SVG */}
+        {activeTab === "time" && (
+          <div className="signal-plot-wrapper">
+            <svg viewBox={`0 0 ${svgW} ${svgH}`} className="signal-svg">
+              {/* Zero line */}
+              <line x1={margin.left} y1={yZero} x2={svgW - margin.right} y2={yZero} stroke="rgba(245, 239, 230, 0.25)" strokeWidth="1.5" />
+              <line x1={mapX(0)} y1={margin.top} x2={mapX(0)} y2={svgH - margin.bottom} stroke="rgba(245, 239, 230, 0.25)" strokeWidth="1.5" />
+
+              {/* Exact periodic wave */}
+              {exactPath && <path d={exactPath} fill="none" stroke="#f5efe6" strokeWidth="1.8" opacity="0.6" strokeDasharray="4 4" />}
+
+              {/* Truncated Fourier Series synthesis */}
+              {reconPath && <path d={reconPath} fill="none" stroke="#c23b60" strokeWidth="2.8" />}
+
+              {/* Axis labels */}
+              <text x={svgW - margin.right} y={yZero - 8} fill="#f5efe6" fontSize="12" textAnchor="end" fontFamily="JetBrains Mono, monospace">t (s)</text>
+              <text x={mapX(0) + 8} y={margin.top + 10} fill="#f5efe6" fontSize="12" fontFamily="JetBrains Mono, monospace">x(t)</text>
+            </svg>
+
+            <div className="signal-plot-footer">
+              <div className="plot-legend">
+                <div className="legend-item">
+                  <span className="legend-marker base-marker" />
+                  <span>Exact Target Periodic Wave</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-marker trans-marker" />
+                  <span>Fourier Series Approximation f_{harmonics}(t)</span>
+                </div>
+              </div>
+              <span style={{ fontSize: "11px", color: "var(--accent-crimson)", fontFamily: "var(--font-mono)" }}>
+                {waveform === "square" ? "Gibbs Ripples (~8.95% overshoot)" : "Harmonic Convergence"}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* FREQUENCY DOMAIN SPECTRUM BAR CHART */}
+        {activeTab === "frequency" && (
+          <div className="signal-plot-wrapper">
+            <svg viewBox={`0 0 ${svgW} ${svgH}`} className="signal-svg">
+              <line x1={margin.left} y1={svgH - margin.bottom} x2={svgW - margin.right} y2={svgH - margin.bottom} stroke="rgba(245, 239, 230, 0.3)" strokeWidth="1.5" />
+              <line x1={margin.left} y1={margin.top} x2={margin.left} y2={svgH - margin.bottom} stroke="rgba(245, 239, 230, 0.3)" strokeWidth="1.5" />
+
+              {coeffs.map((c, i) => {
+                const barSpacing = plotW / (coeffs.length + 1);
+                const bx = margin.left + (i + 1) * barSpacing;
+                const barHeight = (c.magnitude / maxMag) * (plotH - 20);
+                const by = svgH - margin.bottom - barHeight;
+
+                return (
+                  <g key={i}>
+                    {/* Stem line */}
+                    <line x1={bx} y1={svgH - margin.bottom} x2={bx} y2={by} stroke="#c23b60" strokeWidth="3" />
+                    {/* Harmonic dot */}
+                    <circle cx={bx} cy={by} r="5" fill="#c23b60" stroke="#f5efe6" strokeWidth="1.5" />
+                    {/* Amplitude label */}
+                    <text x={bx} y={by - 8} fill="#f5efe6" fontSize="11" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
+                      {c.magnitude.toFixed(2)}
+                    </text>
+                    {/* Harmonic index */}
+                    <text x={bx} y={svgH - margin.bottom + 18} fill="#a3b5a5" fontSize="11" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
+                      {c.harmonic}ω₀
+                    </text>
+                  </g>
+                );
+              })}
+
+              <text x={svgW - margin.right} y={svgH - margin.bottom - 8} fill="#f5efe6" fontSize="12" textAnchor="end" fontFamily="JetBrains Mono, monospace">Frequency (rad/s)</text>
+              <text x={margin.left + 8} y={margin.top + 10} fill="#f5efe6" fontSize="12" fontFamily="JetBrains Mono, monospace">|b_n|</text>
+            </svg>
+
+            <div className="signal-plot-footer">
+              <div className="plot-legend">
+                <div className="legend-item">
+                  <span className="legend-marker trans-marker" />
+                  <span>Discrete Line Spectrum Magnitudes |b_n|</span>
+                </div>
+              </div>
+              <span style={{ fontSize: "11px", color: "var(--accent-sage)", fontFamily: "var(--font-mono)" }}>
+                Fundamental ω₀ = {(2 * Math.PI * fundamentalFreq).toFixed(2)} rad/s
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="plot-foot">
+          <span>Fourier Analysis: Decomposition of periodic signals into orthogonal harmonically-related sinusoids</span>
+          <span>{data ? `${coeffs.length} harmonic components active` : "—"}</span>
+        </div>
+      </section>
+
+      {/* Analytics & Metrics Sidebar */}
+      <aside className="results panel">
+        <div className="panel-title">
+          <span>03</span>
+          <div>
+            <h2>Series Analytics</h2>
+            <p>Harmonic formula &amp; error metrics.</p>
+          </div>
+        </div>
+
+        {!data ? (
+          <div className="result-empty">Synthesizing Fourier harmonics…</div>
+        ) : (
+          <>
+            <div className="verified-box">
+              <span>ANALYTICAL FOURIER SERIES</span>
+              <div style={{ marginTop: "6px" }}>
+                <MathFormula tex={data.formula_latex} block={true} />
+              </div>
+            </div>
+
+            <div className="result-row highlight-row">
+              <span>Mean Squared Error (MSE)</span>
+              <b>{data.mse_error?.toFixed(5) ?? "—"}</b>
+            </div>
+            <div className="result-row">
+              <span>Active Harmonic Count</span>
+              <b>{coeffs.length} terms</b>
+            </div>
+            <div className="result-row">
+              <span>Fundamental Frequency f₀</span>
+              <b>{data.fundamental_freq} Hz (T = {(1 / data.fundamental_freq).toFixed(2)}s)</b>
+            </div>
+
+            <div className="method-note" style={{ marginTop: "16px" }}>
+              <CircleHelp size={15} />
+              <span>
+                <strong>{data.gibbs_note}</strong>
+                <br />
+                As N → ∞, the mean squared error converges to 0 everywhere except at jump discontinuities where the overshoot remains strictly bounded at 8.95%.
+              </span>
+            </div>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function AboutView() {
+  return (
+    <div className="about-layout" style={{ maxWidth: "1100px", margin: "0 auto", paddingBottom: "40px" }}>
+      <section className="title-row" style={{ borderBottom: "1px solid var(--border-subtle)", paddingBottom: "24px" }}>
+        <div>
+          <span className="section-code">PRODUCT BLUEPRINT ARCHITECTURE</span>
+          <h1>AI Math Lab · Core Principles &amp; Technical Foundation</h1>
+          <p>
+            An engineering-grade, interactive learning and computation platform combining symbolic mathematics,
+            rigorous numerical solvers, and signals analysis. Built according to the Final Master Website Blueprint.
+          </p>
+        </div>
+        <div className="formula">
+          <MathFormula tex="\text{Symbolic Math} \oplus \text{Numerical Solvers} \oplus \text{Interactive WebGL/SVG}" />
+        </div>
+      </section>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "24px" }}>
+        <div className="practice-card">
+          <h2 style={{ fontSize: "16px", color: "var(--accent-cream)", marginBottom: "10px" }}>📐 Pillar 1: Calculus Core</h2>
+          <p style={{ fontSize: "13.5px", color: "var(--text-main)", lineHeight: "1.6" }}>
+            Comprehensive symbolic and numerical calculus engines supporting Mean Value Theorem with hybrid AI/Brent root solving,
+            symbolic derivatives up to 5th order, indefinite and definite integration with step-by-step KaTeX explanations,
+            two-sided and directional limits with continuity verification, critical points detection, Taylor/Maclaurin polynomial expansions,
+            and Riemann sum partitions.
+          </p>
+        </div>
+
+        <div className="practice-card">
+          <h2 style={{ fontSize: "16px", color: "var(--accent-crimson)", marginBottom: "10px" }}>📡 Pillar 2: Signals &amp; Systems</h2>
+          <p style={{ fontSize: "13.5px", color: "var(--text-main)", lineHeight: "1.6" }}>
+            Engineering module featuring continuous-time (t) and discrete-time stem ([n]) Signal Explorer with full transformation algebra,
+            4-tier synchronized Convolution Visualizer with interactive sliding and overlap integration, LTI System Analyzer with formal
+            proofs for Linearity, Time-Invariance, Causality, and BIBO Stability, and Fourier Analysis Lab with harmonic synthesis and Gibbs phenomenon.
+          </p>
+        </div>
+
+        <div className="practice-card">
+          <h2 style={{ fontSize: "16px", color: "var(--accent-sage)", marginBottom: "10px" }}>🛡️ Mathematical Reliability Standard</h2>
+          <p style={{ fontSize: "13.5px", color: "var(--text-main)", lineHeight: "1.6" }}>
+            Every calculation adheres to a strict five-step reliability protocol:
+            <br />
+            1. <strong>Validate:</strong> Parse AST expressions and enforce interval bounds.
+            <br />
+            2. <strong>Compute:</strong> SymPy exact symbolic algorithms and SciPy/NumPy numerical solvers.
+            <br />
+            3. <strong>Verify:</strong> Independent residual checks (e.g. Brent root refinement on MVT).
+            <br />
+            4. <strong>No Keystroke Auto-Calculations:</strong> Heavy calculations only trigger on explicit action or Enter key.
+          </p>
+        </div>
+
+        <div className="practice-card">
+          <h2 style={{ fontSize: "16px", color: "var(--accent-amber)", marginBottom: "10px" }}>⚡ Technical Architecture</h2>
+          <p style={{ fontSize: "13.5px", color: "var(--text-main)", lineHeight: "1.6" }}>
+            <strong>Frontend:</strong> React 18, Vite, Three.js 3D WebGL, KaTeX bundled math renderer, Lucide icons, Rich Dark Noir design system.
+            <br />
+            <strong>Backend:</strong> FastAPI, SymPy, NumPy, SciPy, PyTorch.
+            <br />
+            <strong>Routing:</strong> Full URL hash deep-linking (`/#/mvt`, `/#/signals/fourier`, `/#/practice`) surviving browser refreshes and history navigation.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function parseHash() {
+  if (typeof window === "undefined") return { domain: "calculus", page: "mvt" };
+  const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+  if (hash.startsWith("signals/convolution")) return { domain: "signals", signalsTab: "convolution" };
+  if (hash.startsWith("signals/lti")) return { domain: "signals", signalsTab: "lti" };
+  if (hash.startsWith("signals/fourier")) return { domain: "signals", signalsTab: "fourier" };
+  if (hash.startsWith("signals")) return { domain: "signals", signalsTab: "explorer" };
+  if (hash.startsWith("practice") || hash.startsWith("solver")) return { domain: "practice" };
+  if (hash.startsWith("about")) return { domain: "about" };
+  if (hash.startsWith("calculus")) return { domain: "calculus", page: "calculus" };
+  if (hash.startsWith("taylor")) return { domain: "calculus", page: "taylor" };
+  if (hash.startsWith("riemann")) return { domain: "calculus", page: "riemann" };
+  if (hash.startsWith("critical")) return { domain: "calculus", page: "critical" };
+  if (hash.startsWith("limits")) return { domain: "calculus", page: "limits" };
+  return { domain: "calculus", page: "mvt" };
+}
+
 function App() {
   const [activePage, setActivePage] = useState("mvt");
   const [apiStatus, setApiStatus] = useState("checking");
+  const initialRoute = parseHash();
+  const [domainMode, setDomainMode] = useState(initialRoute.domain || "calculus");
+  const [signalsTab, setSignalsTab] = useState(initialRoute.signalsTab || "explorer");
+  const [activePage, setActivePage] = useState(initialRoute.page || "mvt");
   const [showSteps, setShowSteps] = useState(true);
-  const [domainMode, setDomainMode] = useState("calculus"); // "calculus" | "signals" | "practice"
-  const [signalsTab, setSignalsTab] = useState("explorer"); // "explorer" | "convolution"
+
+  // Sync URL hash with active mode and tab
+  useEffect(() => {
+    let target = "";
+    if (domainMode === "signals") target = `#/signals/${signalsTab}`;
+    else if (domainMode === "practice") target = `#/practice`;
+    else if (domainMode === "about") target = `#/about`;
+    else target = `#/${activePage}`;
+    if (window.location.hash !== target) {
+      window.history.replaceState(null, "", target);
+    }
+  }, [domainMode, signalsTab, activePage]);
+
+  // Handle browser Back / Forward history navigation
+  useEffect(() => {
+    const handleHash = () => {
+      const r = parseHash();
+      setDomainMode(r.domain);
+      if (r.signalsTab) setSignalsTab(r.signalsTab);
+      if (r.page) setActivePage(r.page);
+    };
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
 
   // MVT Explorer state
   const [expression, setExpression] = useState("x^2");
@@ -2192,6 +2915,14 @@ function App() {
             <BookOpen size={14} />
             <span>Practice &amp; Solver</span>
           </button>
+          <button
+            type="button"
+            className={`pillar-btn ${domainMode === "about" ? "active" : ""}`}
+            onClick={() => setDomainMode("about")}
+          >
+            <CircleHelp size={14} />
+            <span>Architecture</span>
+          </button>
         </div>
 
         {/* Sub-nav for Calculus Lab */}
@@ -2250,7 +2981,7 @@ function App() {
               className={signalsTab === "explorer" ? "active" : ""}
               onClick={() => setSignalsTab("explorer")}
             >
-              <Activity size={14} /> Signal Explorer &amp; Transformations
+              <Activity size={14} /> Signal Explorer
             </button>
             <button
               type="button"
@@ -2258,6 +2989,20 @@ function App() {
               onClick={() => setSignalsTab("convolution")}
             >
               <RotateCcw size={14} /> Convolution Visualizer
+            </button>
+            <button
+              type="button"
+              className={signalsTab === "lti" ? "active" : ""}
+              onClick={() => setSignalsTab("lti")}
+            >
+              <Cpu size={14} /> LTI System Analyzer
+            </button>
+            <button
+              type="button"
+              className={signalsTab === "fourier" ? "active" : ""}
+              onClick={() => setSignalsTab("fourier")}
+            >
+              <Sparkles size={14} /> Fourier Analysis Lab
             </button>
           </nav>
         )}
@@ -3138,8 +3883,15 @@ function App() {
 
           {signalsTab === "explorer" && <SignalExplorer />}
           {signalsTab === "convolution" && <ConvolutionVisualizer />}
+          {signalsTab === "lti" && <LTIAnalyzer />}
+          {signalsTab === "fourier" && <FourierLab />}
         </>
       )}
+
+      {/* ======================================================== */}
+      {/* ABOUT & ARCHITECTURE VIEW                                */}
+      {/* ======================================================== */}
+      {domainMode === "about" && <AboutView />}
 
       {/* ======================================================== */}
       {/* PRACTICE MODE & STEP-BY-STEP SOLVER                      */}

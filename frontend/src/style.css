@@ -1977,3 +1977,61 @@ footer {
     justify-content: center;
   }
 }
+
+/* ======================================================== */
+/* 14. LTI SYSTEM ANALYZER & FOURIER LAB STYLES             */
+/* ======================================================== */
+.property-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.property-card:hover {
+  border-color: var(--border-hover);
+}
+
+.property-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.property-header strong {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.proof-drawer {
+  background: rgba(13, 11, 14, 0.7);
+  border-left: 3px solid var(--accent-crimson);
+  border-radius: var(--radius-xs);
+  padding: 12px 14px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.block-diagram-card {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.about-layout {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

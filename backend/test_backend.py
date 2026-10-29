@@ -129,6 +129,24 @@ def test_practice_mode():
     assert len(res["steps"]) > 0
     print("[PASS] Practice Verify: verified answer correctly with step-by-step breakdown")
 
+def test_signals_lti():
+    r = client.post("/signals/lti", json={"system_id": "accumulator", "domain": "discrete"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert data["system"]["linear"] is True
+    assert data["system"]["stable"] is False
+    print(f"[PASS] LTI System Analyzer: {data['system']['name']}, Linear={data['system']['linear']}, Stable={data['system']['stable']}")
+
+def test_signals_fourier():
+    r = client.post("/signals/fourier", json={"waveform": "square", "harmonics": 5, "fundamental_freq": 1.0, "amplitude": 1.0})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert len(data["coefficients"]) == 5
+    assert len(data["plot_points"]) > 0
+    print(f"[PASS] Fourier Series square wave: harmonics={len(data['coefficients'])}, MSE={data['mse_error']}")
+
 if __name__ == "__main__":
     test_root()
     test_health()
@@ -140,5 +158,7 @@ if __name__ == "__main__":
     test_riemann_sum()
     test_signals_generate()
     test_signals_convolution()
+    test_signals_lti()
+    test_signals_fourier()
     test_practice_mode()
-    print("\nALL BACKEND UNIT TESTS (INCLUDING SIGNALS & PRACTICE) PASSED WITH 100% SUCCESS!")
+    print("\nALL BACKEND UNIT TESTS (CALCULUS + SIGNALS + FOURIER + LTI + PRACTICE) PASSED WITH 100% SUCCESS!")
