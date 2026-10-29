@@ -28,7 +28,16 @@ import {
   CheckCircle2,
   XCircle,
   Lightbulb,
-  GraduationCap
+  GraduationCap,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X,
+  Home,
+  LayoutDashboard,
+  SlidersHorizontal,
+  ExternalLink,
+  Waves
 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -42,17 +51,49 @@ const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.o
 // KaTeX Math Rendering Component (Synchronous & Bundled)
 // ----------------------------------------------------
 function MathFormula({ tex, block = false }) {
+  const content = String(tex || "");
+
+  // If text contains $...$ or $$...$$ delimiters, parse mixed prose + LaTeX
+  if (content.includes("$")) {
+    const parts = content.split(/(\$\$[\s\S]*?\$\$|\$[^\$]+?\$)/g);
+    return (
+      <span className={block ? "math-block" : "math-inline"}>
+        {parts.map((part, idx) => {
+          if (part.startsWith("$$") && part.endsWith("$$")) {
+            const math = part.slice(2, -2).trim();
+            try {
+              const html = katex.renderToString(math, { displayMode: true, throwOnError: false });
+              return <span key={idx} dangerouslySetInnerHTML={{ __html: html }} />;
+            } catch (e) {
+              return <span key={idx}>{math}</span>;
+            }
+          } else if (part.startsWith("$") && part.endsWith("$")) {
+            const math = part.slice(1, -1).trim();
+            try {
+              const html = katex.renderToString(math, { displayMode: false, throwOnError: false });
+              return <span key={idx} dangerouslySetInnerHTML={{ __html: html }} />;
+            } catch (e) {
+              return <span key={idx}>{math}</span>;
+            }
+          } else {
+            return <span key={idx}>{part}</span>;
+          }
+        })}
+      </span>
+    );
+  }
+
   const html = useMemo(() => {
-    if (!tex) return "";
+    if (!content) return "";
     try {
-      return katex.renderToString(String(tex), {
+      return katex.renderToString(content, {
         displayMode: block,
         throwOnError: false
       });
     } catch (e) {
-      return String(tex);
+      return content;
     }
-  }, [tex, block]);
+  }, [content, block]);
 
   return (
     <span
@@ -2566,35 +2607,996 @@ function AboutView() {
 }
 
 
+
+// ----------------------------------------------------
+// 0. INTERACTIVE HOMEPAGE & SIDEBAR SYSTEM
+// ----------------------------------------------------
+
+function InteractiveWaveCanvas({ preset = "harmonic", freq = 1.2, harmonics = 4, damping = 0.2 }) {
+  const canvasRef = useRef(null);
+  const mousePosRef = useRef({ x: -1000, y: -1000, active: false });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let animId;
+    let t = 0;
+
+    const handleResize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    const onMouseMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mousePosRef.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        active: true
+      };
+    };
+
+    const onMouseLeave = () => {
+      mousePosRef.current.active = false;
+    };
+
+    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mouseleave", onMouseLeave);
+
+    const render = () => {
+      t += 0.024;
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width;
+      const H = rect.height;
+      if (!W || !H) {
+        animId = requestAnimationFrame(render);
+        return;
+      }
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Subtle Background Matrix Grid
+      ctx.strokeStyle = "rgba(138, 158, 140, 0.08)";
+      ctx.lineWidth = 1;
+      const step = 36;
+      for (let x = 0; x <= W; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= H; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+
+      const centerY = H / 2;
+      const amp = Math.min(H * 0.32, 95);
+
+      const computeY = (x, time) => {
+        const normX = (x / W) * 2 - 1; // [-1, 1]
+        let yVal = 0;
+
+        if (preset === "harmonic") {
+          yVal = Math.sin(normX * Math.PI * 2 * freq - time) +
+                 0.45 * Math.sin(normX * Math.PI * 4 * freq + time * 1.3) +
+                 0.25 * Math.cos(normX * Math.PI * 6 * freq - time * 0.7);
+          yVal = yVal / 1.7;
+        } else if (preset === "fourier") {
+          for (let k = 1; k <= Math.min(harmonics * 2, 17); k += 2) {
+            yVal += (4 / (k * Math.PI)) * Math.sin(k * normX * Math.PI * 2 * freq - time * 1.1);
+          }
+        } else if (preset === "damped") {
+          const envelope = Math.exp(-damping * 7 * (normX * normX));
+          yVal = envelope * Math.cos(normX * Math.PI * 8 * freq - time * 2);
+        } else if (preset === "taylor") {
+          const p = normX * Math.PI * 1.4;
+          const term1 = p;
+          const term3 = Math.pow(p, 3) / 6;
+          const term5 = Math.pow(p, 5) / 120;
+          const blend = (Math.sin(time) + 1) / 2;
+          yVal = Math.sin(p) * blend + (term1 - term3 + term5 * 0.6) * (1 - blend);
+          yVal = Math.tanh(yVal * 0.75);
+        }
+
+        // Magnetic mouse ripple distortion
+        if (mousePosRef.current.active) {
+          const dx = x - mousePosRef.current.x;
+          const dist = Math.abs(dx);
+          const influenceRadius = 140;
+          if (dist < influenceRadius) {
+            const factor = Math.cos((dist / influenceRadius) * (Math.PI / 2));
+            const mouseOffset = ((mousePosRef.current.y - centerY) / amp) * 0.65;
+            yVal += mouseOffset * factor;
+          }
+        }
+
+        return centerY - yVal * amp;
+      };
+
+      // Secondary Faint Harmonic Guide Waves
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "rgba(138, 158, 140, 0.22)";
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 4) {
+        const y = centerY - Math.sin((x / W) * Math.PI * 4 * freq - t * 0.9) * (amp * 0.35);
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(212, 163, 115, 0.18)";
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 4) {
+        const y = centerY - Math.cos((x / W) * Math.PI * 6 * freq + t * 0.6) * (amp * 0.25);
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Primary Wave with Deep Burgundy to Sage Gradient Glow
+      const grad = ctx.createLinearGradient(0, 0, W, 0);
+      grad.addColorStop(0, "#C23B60");
+      grad.addColorStop(0.35, "#F5EFE6");
+      grad.addColorStop(0.7, "#8A9E8C");
+      grad.addColorStop(1, "#C23B60");
+
+      // Shaded area under the curve
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 2) {
+        ctx.lineTo(x, computeY(x, t));
+      }
+      ctx.lineTo(W, H);
+      ctx.closePath();
+      const fillGrad = ctx.createLinearGradient(0, centerY - amp, 0, H);
+      fillGrad.addColorStop(0, "rgba(194, 59, 96, 0.18)");
+      fillGrad.addColorStop(1, "rgba(13, 11, 14, 0.0)");
+      ctx.fillStyle = fillGrad;
+      ctx.fill();
+
+      // Primary stroke line
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 2) {
+        const y = computeY(x, t);
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2.6;
+      ctx.shadowColor = "rgba(194, 59, 96, 0.6)";
+      ctx.shadowBlur = 14;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Dynamic Node Markers
+      [0.2, 0.5, 0.8].forEach((ratio, i) => {
+        const nx = ratio * W;
+        const ny = computeY(nx, t);
+        ctx.fillStyle = i === 1 ? "#F5EFE6" : "#C23B60";
+        ctx.beginPath();
+        ctx.arc(nx, ny, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(245, 239, 230, 0.7)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(nx, ny, 8.5, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", handleResize);
+      canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("mouseleave", onMouseLeave);
+    };
+  }, [preset, freq, harmonics, damping]);
+
+  return <canvas ref={canvasRef} className="interactive-hero-canvas" />;
+}
+
+function InteractiveQuickSandbox({ onLaunchModule }) {
+  const [expr, setExpr] = useState("x^3 - 3*x");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const presets = [
+    { label: "Cubic Extrema", val: "x^3 - 3*x" },
+    { label: "Sinc Function", val: "sin(x)/x" },
+    { label: "Gaussian Bell", val: "exp(-x^2)" },
+    { label: "Rational Witch", val: "x/(x^2 + 1)" },
+    { label: "Damped Oscillation", val: "exp(-0.3*x)*sin(3*x)" }
+  ];
+
+  const handleQuickAnalyze = async (targetExpr = expr) => {
+    const fn = (targetExpr || expr).trim();
+    if (!fn) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/calculus`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expression: fn, order: 1, int_type: "indefinite" })
+      });
+      if (!res.ok) throw new Error("Backend analytical computation failed");
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      setError(err.message || "Failed to analyze function");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    handleQuickAnalyze("x^3 - 3*x");
+  }, []);
+
+  return (
+    <section className="sandbox-panel panel">
+      <div className="sandbox-header">
+        <div className="sandbox-tag">
+          <Sparkles size={14} />
+          <span>INSTANT MATHEMATICAL WORKBENCH</span>
+        </div>
+        <h2>Instant Formula Analytical Workbench</h2>
+        <p>Type any real-valued function to calculate instant exact derivatives, closed-form antiderivatives, and visual geometry.</p>
+      </div>
+
+      <div className="sandbox-input-row">
+        <div className="sandbox-input-wrapper">
+          <span className="sandbox-prefix">f(x) =</span>
+          <input
+            className="sandbox-input"
+            value={expr}
+            onChange={(e) => setExpr(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleQuickAnalyze(); }}
+            placeholder="e.g. x^3 - 3*x or sin(x)/x"
+          />
+        </div>
+        <button
+          className="sandbox-analyze-btn"
+          onClick={() => handleQuickAnalyze()}
+          disabled={loading}
+        >
+          <Play size={15} />
+          {loading ? "Analyzing…" : "Analyze Instantly"}
+        </button>
+      </div>
+
+      <div className="sandbox-presets">
+        <span className="preset-label">Instant Presets:</span>
+        {presets.map((p) => (
+          <button
+            key={p.val}
+            type="button"
+            className={`preset-chip ${expr === p.val ? "active" : ""}`}
+            onClick={() => {
+              setExpr(p.val);
+              handleQuickAnalyze(p.val);
+            }}
+          >
+            {p.label} (<code>{p.val}</code>)
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="sandbox-error">{error}</div>}
+
+      {result && (
+        <div className="sandbox-results-grid">
+          <div className="sandbox-result-card">
+            <div className="card-badge">FIRST DERIVATIVE</div>
+            <div className="card-math">
+              <MathFormula tex={`f'(x) = ${result.derivative}`} block={true} />
+            </div>
+            <span className="card-meta">Exact analytical SymPy derivative</span>
+          </div>
+
+          <div className="sandbox-result-card">
+            <div className="card-badge">INDEFINITE INTEGRAL</div>
+            <div className="card-math">
+              <MathFormula tex={`\\int f(x)\\,dx = ${result.integral}`} block={true} />
+            </div>
+            <span className="card-meta">Closed-form primitive with + C</span>
+          </div>
+
+          <div className="sandbox-result-card action-card">
+            <div className="card-badge">DEEP WORKSPACE</div>
+            <p>Inspect higher-order derivatives (1st–5th), definite integral steps, and Taylor series expansion.</p>
+            <button
+              className="sandbox-launch-btn"
+              onClick={() => onLaunchModule("calculus", "calculus")}
+            >
+              Open Full Symbolic Engine <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InteractiveHome({ onNavigate, apiStatus }) {
+  const [wavePreset, setWavePreset] = useState("harmonic");
+  const [freq, setFreq] = useState(1.2);
+  const [harmonics, setHarmonics] = useState(5);
+  const [damping, setDamping] = useState(0.2);
+
+  const modules = [
+    {
+      id: "mvt",
+      domain: "calculus",
+      code: "MODULE 01",
+      title: "3D Mean Value Theorem",
+      category: "Calculus Core",
+      desc: "Interactive 3D secant and tangent slope alignment with Brent numerical root verification.",
+      formula: "f'(c) = \\frac{f(b) - f(a)}{b - a}",
+      icon: Compass,
+      accent: "burgundy"
+    },
+    {
+      id: "calculus",
+      domain: "calculus",
+      code: "MODULE 02",
+      title: "Symbolic Calculus Engine",
+      category: "Calculus Core",
+      desc: "Exact 1st–5th order derivatives, closed-form antiderivatives, and definite integrals with KaTeX proofs.",
+      formula: "\\frac{d}{dx}\\left[\\int f(x)\\,dx\\right] = f(x)",
+      icon: Cpu,
+      accent: "cream"
+    },
+    {
+      id: "taylor",
+      domain: "calculus",
+      code: "MODULE 03",
+      title: "Taylor Series Approximator",
+      category: "Calculus Core",
+      desc: "Dynamic polynomial expansion around center point a with term-by-term convergence overlay.",
+      formula: "P_n(x) = \\sum_{k=0}^n \\frac{f^{(k)}(a)}{k!}(x - a)^k",
+      icon: Sparkles,
+      accent: "sage"
+    },
+    {
+      id: "riemann",
+      domain: "calculus",
+      code: "MODULE 04",
+      title: "Riemann Sums Visualizer",
+      category: "Calculus Core",
+      desc: "Left, right, midpoint, and trapezoidal geometric partition area simulations converging to the integral.",
+      formula: "\\int_a^b f(x)\\,dx \\approx \\sum_{i=1}^n f(x_i^*)\\,\\Delta x",
+      icon: BarChart3,
+      accent: "burgundy"
+    },
+    {
+      id: "critical",
+      domain: "calculus",
+      code: "MODULE 05",
+      title: "Critical Points & Extrema",
+      category: "Calculus Core",
+      desc: "Stationary point solver, local max/min classification, inflection points, and global bounds on [a, b].",
+      formula: "f'(x) = 0, \\quad f''(x) \\neq 0",
+      icon: TrendingUp,
+      accent: "sage"
+    },
+    {
+      id: "limits",
+      domain: "calculus",
+      code: "MODULE 06",
+      title: "Limits & Continuity",
+      category: "Calculus Core",
+      desc: "Directional one-sided limits, limits at infinity, removable & jump discontinuities, and L'Hôpital steps.",
+      formula: "\\lim_{x \\to a^-} f(x) = \\lim_{x \\to a^+} f(x) = L",
+      icon: InfinityIcon,
+      accent: "cream"
+    },
+    {
+      id: "signals-explorer",
+      domain: "signals",
+      sub: "explorer",
+      code: "MODULE 07",
+      title: "Waveform & Signal Explorer",
+      category: "Signals & Systems",
+      desc: "Continuous-time t and discrete-time n stem waveforms, energy/power metrics, and affine transformations.",
+      formula: "y(t) = A \\cdot x(a(t - t_0))",
+      icon: Activity,
+      accent: "burgundy"
+    },
+    {
+      id: "signals-convolution",
+      domain: "signals",
+      sub: "convolution",
+      code: "MODULE 08",
+      title: "4-Track Convolution Visualizer",
+      category: "Signals & Systems",
+      desc: "Continuous integration & discrete sliding summation across 4 synchronized visual inspection tracks.",
+      formula: "(x * h)(t) = \\int_{-\\infty}^\\infty x(\\tau)h(t - \\tau)\\,d\\tau",
+      icon: RotateCcw,
+      accent: "sage"
+    },
+    {
+      id: "signals-lti",
+      domain: "signals",
+      sub: "lti",
+      code: "MODULE 09",
+      title: "LTI System Analyzer & Proofs",
+      category: "Signals & Systems",
+      desc: "Formal mathematical proofs for Linearity, Time-Invariance, Causality, and BIBO Stability.",
+      formula: "\\mathcal{T}\\{a x_1 + b x_2\\} = a\\mathcal{T}\\{x_1\\} + b\\mathcal{T}\\{x_2\\}",
+      icon: CheckCircle2,
+      accent: "cream"
+    },
+    {
+      id: "signals-fourier",
+      domain: "signals",
+      sub: "fourier",
+      code: "MODULE 10",
+      title: "Fourier Analysis & Harmonic Lab",
+      category: "Signals & Systems",
+      desc: "Harmonic synthesis of square, sawtooth, and triangle waves with interactive line spectrum inspector.",
+      formula: "x(t) = a_0 + \\sum_{n=1}^N [a_n\\cos(n\\omega_0 t) + b_n\\sin(n\\omega_0 t)]",
+      icon: Waves,
+      accent: "burgundy"
+    }
+  ];
+
+  return (
+    <div className="interactive-home">
+      {/* Hero Section */}
+      <section className="home-hero">
+        <div className="hero-content">
+          <div className="hero-pill">
+            <span className="hero-pill-dot" />
+            <span>AI COMPUTATIONAL ENGINE · 10 EXPERIMENTAL LABS</span>
+          </div>
+
+          <h1 className="hero-title">
+            Computational Mathematics <br />
+            <span className="hero-title-accent">&amp; Signal Intelligence</span>
+          </h1>
+
+          <p className="hero-subtitle">
+            An advanced interactive laboratory blending exact closed-form calculus, real-time 3D Mean Value Theorem geometry, dynamic polynomial expansions, 4-track convolution, and formal LTI stability proofs.
+          </p>
+
+          <div className="hero-cta-group">
+            <button
+              className="hero-btn primary"
+              onClick={() => onNavigate("calculus", "mvt")}
+            >
+              <Compass size={16} />
+              <span>Launch 3D MVT Lab</span>
+            </button>
+
+            <button
+              className="hero-btn secondary"
+              onClick={() => onNavigate("signals", "fourier")}
+            >
+              <Waves size={16} />
+              <span>Fourier Analysis</span>
+            </button>
+
+            <button
+              className="hero-btn tertiary"
+              onClick={() => onNavigate("practice")}
+            >
+              <BookOpen size={16} />
+              <span>Practice Arena</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Interactive Wave Canvas Card */}
+        <div className="hero-canvas-card">
+          <div className="canvas-header">
+            <div className="canvas-title">
+              <Activity size={14} />
+              <span>INTERACTIVE WAVE DYNAMICS</span>
+            </div>
+            <div className="canvas-mode-chips">
+              <button
+                type="button"
+                className={`canvas-chip ${wavePreset === "harmonic" ? "active" : ""}`}
+                onClick={() => setWavePreset("harmonic")}
+              >
+                Harmonics
+              </button>
+              <button
+                type="button"
+                className={`canvas-chip ${wavePreset === "fourier" ? "active" : ""}`}
+                onClick={() => setWavePreset("fourier")}
+              >
+                Fourier
+              </button>
+              <button
+                type="button"
+                className={`canvas-chip ${wavePreset === "damped" ? "active" : ""}`}
+                onClick={() => setWavePreset("damped")}
+              >
+                Damped
+              </button>
+              <button
+                type="button"
+                className={`canvas-chip ${wavePreset === "taylor" ? "active" : ""}`}
+                onClick={() => setWavePreset("taylor")}
+              >
+                Taylor
+              </button>
+            </div>
+          </div>
+
+          <div className="canvas-viewport">
+            <InteractiveWaveCanvas
+              preset={wavePreset}
+              freq={freq}
+              harmonics={harmonics}
+              damping={damping}
+            />
+            <div className="canvas-formula-overlay">
+              {wavePreset === "harmonic" && <MathFormula tex="y(x,t) = \\sum A_k \\sin(k\\omega x \\mp \\omega t)" />}
+              {wavePreset === "fourier" && <MathFormula tex="y(t) = \\sum_{k=1,3...}^N \\frac{4}{k\\pi}\\sin(k\\omega t)" />}
+              {wavePreset === "damped" && <MathFormula tex="y(x,t) = e^{-\\zeta x^2} \\cos(\\omega x - v t)" />}
+              {wavePreset === "taylor" && <MathFormula tex="y(x) \\approx x - \\frac{x^3}{6} + \\frac{x^5}{120}" />}
+            </div>
+          </div>
+
+          <div className="canvas-controls-bar">
+            <div className="canvas-control-slider">
+              <label>Frequency (ω): {freq.toFixed(1)}</label>
+              <input
+                type="range"
+                min="0.5"
+                max="2.5"
+                step="0.1"
+                value={freq}
+                onChange={(e) => setFreq(parseFloat(e.target.value))}
+              />
+            </div>
+            <div className="canvas-control-slider">
+              <label>Harmonics (N): {harmonics}</label>
+              <input
+                type="range"
+                min="1"
+                max="11"
+                step="2"
+                value={harmonics}
+                onChange={(e) => setHarmonics(parseInt(e.target.value, 10))}
+              />
+            </div>
+            <div className="canvas-hint">
+              <span>Hover mouse over wave to apply dynamic gravitational ripple</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Instant Sandbox Evaluator */}
+      <InteractiveQuickSandbox
+        onLaunchModule={(dom, sub) => onNavigate(dom, sub)}
+      />
+
+      {/* Bento Grid: 10 Core Modules */}
+      <section className="bento-section">
+        <div className="bento-header">
+          <span className="bento-badge">COMPREHENSIVE CURRICULUM</span>
+          <h2>The 10 Computational Laboratories</h2>
+          <p>Explore both pillars: foundational calculus and time/frequency signals &amp; systems.</p>
+        </div>
+
+        <div className="bento-grid">
+          {modules.map((m) => {
+            const Icon = m.icon;
+            return (
+              <div
+                key={m.id}
+                className={`bento-card accent-${m.accent}`}
+                onClick={() => onNavigate(m.domain, m.sub || m.id)}
+              >
+                <div className="bento-card-top">
+                  <div className="bento-icon-wrapper">
+                    <Icon size={18} />
+                  </div>
+                  <span className="bento-code">{m.code}</span>
+                </div>
+
+                <h3 className="bento-card-title">{m.title}</h3>
+                <span className="bento-category">{m.category}</span>
+                <p className="bento-card-desc">{m.desc}</p>
+
+                <div className="bento-formula-box">
+                  <MathFormula tex={m.formula} />
+                </div>
+
+                <div className="bento-card-footer">
+                  <span>Enter Lab</span>
+                  <ArrowRight size={14} className="bento-arrow" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Practice Arena Featured Banner */}
+      <section className="featured-banner-section">
+        <div className="featured-banner">
+          <div className="featured-banner-text">
+            <div className="banner-tag">
+              <GraduationCap size={16} />
+              <span>PILLAR 03 · VERIFIED STEP-BY-STEP SOLVER</span>
+            </div>
+            <h2>Master Mathematical Problem Sets with KaTeX Proofs</h2>
+            <p>
+              Test your understanding across Chain Rule, Mean Value Theorem, Taylor Series, Definite Integrals, Continuous Convolution, and LTI Stability with instant verification and formal derivations.
+            </p>
+          </div>
+          <button
+            className="featured-banner-btn"
+            onClick={() => onNavigate("practice")}
+          >
+            <BookOpen size={16} />
+            <span>Open Problem Bank &amp; Solver</span>
+          </button>
+        </div>
+      </section>
+
+      {/* System Telemetry & Architecture Specs */}
+      <section className="system-telemetry-section">
+        <div className="telemetry-grid">
+          <div className="telemetry-card">
+            <strong>11</strong>
+            <span>Verified Endpoints</span>
+            <p>100% analytically tested symbolic and numerical APIs.</p>
+          </div>
+          <div className="telemetry-card">
+            <strong>Exact</strong>
+            <span>SymPy Precision</span>
+            <p>Zero numerical truncation on symbolic derivations.</p>
+          </div>
+          <div className="telemetry-card">
+            <strong>3D WebGL</strong>
+            <span>Three.js Engine</span>
+            <p>Hardware-accelerated dynamic geometry with OrbitControls.</p>
+          </div>
+          <div className="telemetry-card">
+            <strong>Formal</strong>
+            <span>LTI Proofs</span>
+            <p>Linearity, Time-Invariance, and BIBO Stability theorems.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AppSidebar({
+  domainMode,
+  activePage,
+  signalsTab,
+  collapsed,
+  onToggleCollapse,
+  mobileOpen,
+  onCloseMobile,
+  onNavigate,
+  apiStatus
+}) {
+  const calculusItems = [
+    { id: "mvt", label: "3D MVT Explorer", code: "01", icon: Compass },
+    { id: "calculus", label: "Calculus Engine", code: "02", icon: Cpu },
+    { id: "taylor", label: "Taylor Series", code: "03", icon: Sparkles },
+    { id: "riemann", label: "Riemann Sums", code: "04", icon: BarChart3 },
+    { id: "critical", label: "Critical Points", code: "05", icon: TrendingUp },
+    { id: "limits", label: "Limits & Continuity", code: "06", icon: InfinityIcon }
+  ];
+
+  const signalsItems = [
+    { id: "explorer", label: "Signal Explorer", code: "07", icon: Activity },
+    { id: "convolution", label: "Convolution Lab", code: "08", icon: RotateCcw },
+    { id: "lti", label: "LTI System Analyzer", code: "09", icon: CheckCircle2 },
+    { id: "fourier", label: "Fourier Analysis", code: "10", icon: Waves }
+  ];
+
+  return (
+    <>
+      {mobileOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside className={`app-sidebar ${collapsed ? "collapsed" : ""} ${mobileOpen ? "mobile-open" : ""}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-brand" onClick={() => onNavigate("home")}>
+            <div className="brand-icon-box">
+              <FlaskConical size={18} />
+            </div>
+            {!collapsed && (
+              <div className="brand-text">
+                <strong>AI MATH LAB</strong>
+                <span>Calculus &amp; Signals</span>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="sidebar-toggle-btn"
+            onClick={onToggleCollapse}
+            title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </div>
+
+        <div className="sidebar-nav-scroll">
+          {/* Section: Overview */}
+          <div className="sidebar-section">
+            {!collapsed && <div className="sidebar-section-title">OVERVIEW</div>}
+            <button
+              type="button"
+              className={`sidebar-nav-item ${domainMode === "home" ? "active" : ""}`}
+              onClick={() => onNavigate("home")}
+              title="Dashboard & Overview"
+            >
+              <Home size={16} />
+              {!collapsed && <span>Interactive Overview</span>}
+            </button>
+          </div>
+
+          {/* Section: Pillar 01 - Calculus */}
+          <div className="sidebar-section">
+            {!collapsed && <div className="sidebar-section-title">CALCULUS CORE</div>}
+            {calculusItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = domainMode === "calculus" && activePage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`sidebar-nav-item ${isActive ? "active" : ""}`}
+                  onClick={() => onNavigate("calculus", item.id)}
+                  title={item.label}
+                >
+                  <Icon size={16} />
+                  {!collapsed && (
+                    <>
+                      <span className="item-label">{item.label}</span>
+                      <span className="item-code">{item.code}</span>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Section: Pillar 02 - Signals */}
+          <div className="sidebar-section">
+            {!collapsed && <div className="sidebar-section-title">SIGNALS &amp; SYSTEMS</div>}
+            {signalsItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = domainMode === "signals" && signalsTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`sidebar-nav-item ${isActive ? "active" : ""}`}
+                  onClick={() => onNavigate("signals", item.id)}
+                  title={item.label}
+                >
+                  <Icon size={16} />
+                  {!collapsed && (
+                    <>
+                      <span className="item-label">{item.label}</span>
+                      <span className="item-code">{item.code}</span>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Section: Practice & Solver */}
+          <div className="sidebar-section">
+            {!collapsed && <div className="sidebar-section-title">PRACTICE ARENA</div>}
+            <button
+              type="button"
+              className={`sidebar-nav-item ${domainMode === "practice" ? "active" : ""}`}
+              onClick={() => onNavigate("practice")}
+              title="Problem Bank & Step-by-Step Solver"
+            >
+              <BookOpen size={16} />
+              {!collapsed && (
+                <>
+                  <span className="item-label">Problem Solver</span>
+                  <span className="item-badge-pill">SOLVER</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Section: Architecture */}
+          <div className="sidebar-section">
+            {!collapsed && <div className="sidebar-section-title">SYSTEM</div>}
+            <button
+              type="button"
+              className={`sidebar-nav-item ${domainMode === "about" ? "active" : ""}`}
+              onClick={() => onNavigate("about")}
+              title="Architecture Specifications"
+            >
+              <CircleHelp size={16} />
+              {!collapsed && <span className="item-label">Architecture</span>}
+            </button>
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-status-pill">
+            <i className={apiStatus === "online" ? "online" : "pulse"} />
+            {!collapsed && (
+              <span>{apiStatus === "online" ? "API ONLINE" : "CONNECTING…"}</span>
+            )}
+          </div>
+          {!collapsed && <span className="sidebar-version">v2.5 · Rich Noir</span>}
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function AppNavbar({
+  domainMode,
+  activePage,
+  signalsTab,
+  apiStatus,
+  onOpenMobile,
+  onNavigate
+}) {
+  const getBreadcrumbs = () => {
+    if (domainMode === "home") {
+      return { pillar: "Dashboard", module: "Interactive Overview" };
+    }
+    if (domainMode === "practice") {
+      return { pillar: "Practice Arena", module: "Problem Bank & Step-by-Step Solver" };
+    }
+    if (domainMode === "about") {
+      return { pillar: "System Architecture", module: "Engine Specifications" };
+    }
+    if (domainMode === "signals") {
+      const names = {
+        explorer: "Module 07 · Waveform Dynamics",
+        convolution: "Module 08 · Convolution Visualizer",
+        lti: "Module 09 · LTI System Analyzer",
+        fourier: "Module 10 · Fourier Analysis Lab"
+      };
+      return { pillar: "Signals & Systems", module: names[signalsTab] || "Lab" };
+    }
+    const names = {
+      mvt: "Module 01 · 3D Mean Value Theorem",
+      calculus: "Module 02 · Symbolic Calculus Engine",
+      taylor: "Module 03 · Taylor Series Approximator",
+      riemann: "Module 04 · Riemann Sums Visualizer",
+      critical: "Module 05 · Critical Points & Extrema",
+      limits: "Module 06 · Limits & Continuity"
+    };
+    return { pillar: "Calculus Core", module: names[activePage] || "Lab" };
+  };
+
+  const breadcrumbs = getBreadcrumbs();
+
+  return (
+    <header className="app-navbar">
+      <div className="navbar-left">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          onClick={onOpenMobile}
+          title="Open Menu"
+        >
+          <Menu size={18} />
+        </button>
+
+        <div className="navbar-breadcrumbs">
+          <span className="crumb-pillar" onClick={() => onNavigate("home")}>
+            AI Math Lab
+          </span>
+          <span className="crumb-sep">/</span>
+          <span className="crumb-section">{breadcrumbs.pillar}</span>
+          <span className="crumb-sep">/</span>
+          <strong className="crumb-module">{breadcrumbs.module}</strong>
+        </div>
+      </div>
+
+      <div className="navbar-right">
+        <button
+          type="button"
+          className="navbar-quick-btn"
+          onClick={() => onNavigate("home")}
+          title="Return to Overview"
+        >
+          <Home size={14} />
+          <span>Overview</span>
+        </button>
+
+        <button
+          type="button"
+          className="navbar-quick-btn"
+          onClick={() => onNavigate("practice")}
+          title="Open Problem Solver"
+        >
+          <BookOpen size={14} />
+          <span>Solver</span>
+        </button>
+
+        <div className="navbar-status-badge">
+          <i className={apiStatus === "online" ? "online" : "pulse"} />
+          <span>{apiStatus === "online" ? "API ONLINE" : "CONNECTING"}</span>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
 function parseHash() {
-  if (typeof window === "undefined") return { domain: "calculus", page: "mvt" };
+  if (typeof window === "undefined") return { domain: "home" };
   const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
+  if (!hash || hash === "home") return { domain: "home" };
   if (hash.startsWith("signals/convolution")) return { domain: "signals", signalsTab: "convolution" };
   if (hash.startsWith("signals/lti")) return { domain: "signals", signalsTab: "lti" };
   if (hash.startsWith("signals/fourier")) return { domain: "signals", signalsTab: "fourier" };
   if (hash.startsWith("signals")) return { domain: "signals", signalsTab: "explorer" };
   if (hash.startsWith("practice") || hash.startsWith("solver")) return { domain: "practice" };
   if (hash.startsWith("about")) return { domain: "about" };
+  if (hash.startsWith("mvt")) return { domain: "calculus", page: "mvt" };
   if (hash.startsWith("calculus")) return { domain: "calculus", page: "calculus" };
   if (hash.startsWith("taylor")) return { domain: "calculus", page: "taylor" };
   if (hash.startsWith("riemann")) return { domain: "calculus", page: "riemann" };
   if (hash.startsWith("critical")) return { domain: "calculus", page: "critical" };
   if (hash.startsWith("limits")) return { domain: "calculus", page: "limits" };
-  return { domain: "calculus", page: "mvt" };
+  return { domain: "home" };
 }
 
 function App() {
   const [apiStatus, setApiStatus] = useState("checking");
   const initialRoute = parseHash();
-  const [domainMode, setDomainMode] = useState(initialRoute.domain || "calculus");
+  const [domainMode, setDomainMode] = useState(initialRoute.domain || "home");
   const [signalsTab, setSignalsTab] = useState(initialRoute.signalsTab || "explorer");
   const [activePage, setActivePage] = useState(initialRoute.page || "mvt");
   const [showSteps, setShowSteps] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const navigateTo = (domain, sub = null) => {
+    setDomainMode(domain);
+    if (domain === "calculus" && sub) setActivePage(sub);
+    if (domain === "signals" && sub) setSignalsTab(sub);
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // Sync URL hash with active mode and tab
   useEffect(() => {
     let target = "";
-    if (domainMode === "signals") target = `#/signals/${signalsTab}`;
+    if (domainMode === "home") target = `#/home`;
+    else if (domainMode === "signals") target = `#/signals/${signalsTab}`;
     else if (domainMode === "practice") target = `#/practice`;
     else if (domainMode === "about") target = `#/about`;
     else target = `#/${activePage}`;
@@ -2862,7 +3864,7 @@ function App() {
   const predictionError = numerical != null && ml != null ? Math.abs(ml - numerical) : null;
 
   return (
-    <main className="app">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <div className="ambient-glow ambient-glow-one" aria-hidden="true" />
       <div className="ambient-glow ambient-glow-two" aria-hidden="true" />
       <div className="background-grid" aria-hidden="true" />
@@ -2876,141 +3878,35 @@ function App() {
         </div>
       )}
 
-      {/* Top Navigation */}
-      <header className="topbar">
-        <div className="brand-mark">
-          <div className="brand-icon">
-            <FlaskConical size={20} />
-          </div>
-          <div>
-            <strong>AI MATH LAB</strong>
-            <span>Computational Mathematics &amp; Signals</span>
-          </div>
-        </div>
+      {/* Modern Collapsible Left Sidebar */}
+      <AppSidebar
+        domainMode={domainMode}
+        activePage={activePage}
+        signalsTab={signalsTab}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+        onNavigate={navigateTo}
+        apiStatus={apiStatus}
+      />
 
-        {/* 3 Main Pillars Segmented Switcher */}
-        <div className="pillar-switcher" role="tablist" aria-label="Main Disciplines">
-          <button
-            type="button"
-            className={`pillar-btn ${domainMode === "calculus" ? "active" : ""}`}
-            onClick={() => setDomainMode("calculus")}
-          >
-            <Compass size={14} />
-            <span>Calculus Lab</span>
-          </button>
-          <button
-            type="button"
-            className={`pillar-btn ${domainMode === "signals" ? "active" : ""}`}
-            onClick={() => setDomainMode("signals")}
-          >
-            <Activity size={14} />
-            <span>Signals &amp; Systems</span>
-          </button>
-          <button
-            type="button"
-            className={`pillar-btn ${domainMode === "practice" ? "active" : ""}`}
-            onClick={() => setDomainMode("practice")}
-          >
-            <BookOpen size={14} />
-            <span>Practice &amp; Solver</span>
-          </button>
-          <button
-            type="button"
-            className={`pillar-btn ${domainMode === "about" ? "active" : ""}`}
-            onClick={() => setDomainMode("about")}
-          >
-            <CircleHelp size={14} />
-            <span>Architecture</span>
-          </button>
-        </div>
+      {/* Main Content Area */}
+      <div className="app-main-content">
+        <AppNavbar
+          domainMode={domainMode}
+          activePage={activePage}
+          signalsTab={signalsTab}
+          apiStatus={apiStatus}
+          onOpenMobile={() => setMobileMenuOpen(true)}
+          onNavigate={navigateTo}
+        />
 
-        {/* Sub-nav for Calculus Lab */}
-        {domainMode === "calculus" && (
-          <nav className="page-nav" aria-label="Calculus Modules">
-            <button
-              type="button"
-              className={activePage === "mvt" ? "active" : ""}
-              onClick={() => setActivePage("mvt")}
-            >
-              <Compass size={14} /> MVT Explorer
-            </button>
-            <button
-              type="button"
-              className={activePage === "calculus" ? "active" : ""}
-              onClick={() => setActivePage("calculus")}
-            >
-              <Cpu size={14} /> Calculus Engine
-            </button>
-            <button
-              type="button"
-              className={activePage === "taylor" ? "active" : ""}
-              onClick={() => setActivePage("taylor")}
-            >
-              <Sparkles size={14} /> Taylor Series
-            </button>
-            <button
-              type="button"
-              className={activePage === "riemann" ? "active" : ""}
-              onClick={() => setActivePage("riemann")}
-            >
-              <BarChart3 size={14} /> Riemann Sums
-            </button>
-            <button
-              type="button"
-              className={activePage === "critical" ? "active" : ""}
-              onClick={() => setActivePage("critical")}
-            >
-              <TrendingUp size={14} /> Critical Points
-            </button>
-            <button
-              type="button"
-              className={activePage === "limits" ? "active" : ""}
-              onClick={() => setActivePage("limits")}
-            >
-              <InfinityIcon size={14} /> Limits
-            </button>
-          </nav>
-        )}
-
-        {/* Sub-nav for Signals & Systems */}
-        {domainMode === "signals" && (
-          <nav className="page-nav" aria-label="Signals Modules">
-            <button
-              type="button"
-              className={signalsTab === "explorer" ? "active" : ""}
-              onClick={() => setSignalsTab("explorer")}
-            >
-              <Activity size={14} /> Signal Explorer
-            </button>
-            <button
-              type="button"
-              className={signalsTab === "convolution" ? "active" : ""}
-              onClick={() => setSignalsTab("convolution")}
-            >
-              <RotateCcw size={14} /> Convolution Visualizer
-            </button>
-            <button
-              type="button"
-              className={signalsTab === "lti" ? "active" : ""}
-              onClick={() => setSignalsTab("lti")}
-            >
-              <Cpu size={14} /> LTI System Analyzer
-            </button>
-            <button
-              type="button"
-              className={signalsTab === "fourier" ? "active" : ""}
-              onClick={() => setSignalsTab("fourier")}
-            >
-              <Sparkles size={14} /> Fourier Analysis Lab
-            </button>
-          </nav>
-        )}
-
-        <div className="status">
-          <i className={apiStatus === "online" ? "online" : "pulse"} />
-          {apiStatus === "online" ? "API ONLINE" : "CONNECTING"}
-        </div>
-      </header>
+        <div className="app-content-body">
+          {/* 0. Interactive Homepage */}
+          {domainMode === "home" && (
+            <InteractiveHome onNavigate={navigateTo} apiStatus={apiStatus} />
+          )}
 
       {domainMode === "calculus" && (
         <>
@@ -3916,14 +4812,17 @@ function App() {
         </>
       )}
 
-      {/* Footer */}
-      <footer>
-        <div className="footer-content">
-          <span>AI MATH LAB · Next-Generation Computational Mathematics Platform</span>
-          <span>FastAPI · PyTorch · SymPy · Three.js · React · KaTeX</span>
         </div>
-      </footer>
-    </main>
+
+        {/* Global Minimal Footer */}
+        <footer className="app-footer">
+          <div className="footer-content">
+            <span>AI MATH LAB · Next-Generation Computational Mathematics Platform</span>
+            <span>FastAPI · PyTorch · SymPy · Three.js · React · KaTeX</span>
+          </div>
+        </footer>
+      </div>
+    </div>
   );
 }
 
