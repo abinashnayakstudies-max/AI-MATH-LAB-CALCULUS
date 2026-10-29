@@ -883,6 +883,399 @@ def calculate_riemann_sum(req: RiemannRequest):
         return {"error": f"Riemann sum error: {str(e)}"}
 
 
+# ========================================================
+# SIGNALS & SYSTEMS LAB MODELS & ENDPOINTS
+# ========================================================
+
+class SignalGenerateRequest(BaseModel):
+    signal_type: str = Field("step", description="impulse, step, ramp, rect, sine, cosine, exponential, sinc")
+    domain: str = Field("continuous", description="continuous or discrete")
+    time_start: float = Field(-5.0, description="Start time/index")
+    time_end: float = Field(5.0, description="End time/index")
+    amplitude: float = Field(1.0, description="Signal amplitude A")
+    frequency: float = Field(1.0, description="Frequency (rad/s for cont, rad/sample for disc)")
+    phase: float = Field(0.0, description="Phase shift in radians")
+    decay: float = Field(-0.5, description="Exponential decay/growth factor")
+    pulse_width: float = Field(2.0, description="Width for rectangular pulse")
+    time_shift: float = Field(0.0, description="Time shift t0 (positive = delay, negative = advance)")
+    time_scaling: float = Field(1.0, description="Time scaling factor a in x(a*t)")
+    time_reversal: bool = Field(False, description="Whether to reverse time x(-t)")
+    amp_scale: float = Field(1.0, description="Amplitude scaling factor")
+
+
+def eval_base_signal(t_val: float, signal_type: str, amp: float, freq: float, phase: float, decay: float, width: float, domain: str) -> float:
+    st = signal_type.lower()
+    if st == "impulse":
+        if domain == "discrete":
+            return amp if abs(round(t_val)) == 0 else 0.0
+        else:
+            return amp if abs(t_val) < 0.05 else 0.0
+    elif st == "step":
+        if t_val >= -1e-9:
+            return amp
+        return 0.0
+    elif st == "ramp":
+        return amp * t_val if t_val >= 0 else 0.0
+    elif st == "rect":
+        half_w = width / 2.0
+        return amp if abs(t_val) <= half_w + 1e-9 else 0.0
+    elif st == "sine":
+        return amp * np.sin(freq * t_val + phase)
+    elif st == "cosine":
+        return amp * np.cos(freq * t_val + phase)
+    elif st == "exponential":
+        if t_val >= -1e-9:
+            return amp * np.exp(decay * t_val)
+        return 0.0
+    elif st == "sinc":
+        if abs(t_val) < 1e-9:
+            return amp
+        return amp * np.sin(np.pi * t_val) / (np.pi * t_val)
+    return 0.0
+
+
+@app.post("/signals/generate")
+def generate_signal(req: SignalGenerateRequest):
+    try:
+        t_start = max(-50.0, min(req.time_start, req.time_end - 0.1))
+        t_end = min(50.0, max(req.time_end, req.time_start + 0.1))
+        is_discrete = req.domain.lower() == "discrete"
+
+        if is_discrete:
+            n_start = int(np.floor(t_start))
+            n_end = int(np.ceil(t_end))
+            t_axis = [float(n) for n in range(n_start, n_end + 1)]
+        else:
+            n_pts = 301
+            t_axis = [float(val) for val in np.linspace(t_start, t_end, n_pts)]
+
+        original_samples = []
+        transformed_samples = []
+
+        scale_a = req.time_scaling if req.time_scaling != 0 else 1.0
+        if req.time_reversal:
+            scale_a = -abs(scale_a)
+
+        for t in t_axis:
+            y_orig = float(eval_base_signal(t, req.signal_type, req.amplitude, req.frequency, req.phase, req.decay, req.pulse_width, req.domain))
+            original_samples.append({"t": round(t, 4), "y": round(y_orig, 5)})
+
+            t_eval = scale_a * (t - req.time_shift)
+            y_trans = float(req.amp_scale * eval_base_signal(t_eval, req.signal_type, req.amplitude, req.frequency, req.phase, req.decay, req.pulse_width, req.domain))
+            transformed_samples.append({"t": round(t, 4), "y": round(y_trans, 5)})
+
+        var_sym = "n" if is_discrete else "t"
+        st = req.signal_type.lower()
+        if st == "impulse":
+            base_tex = f"{req.amplitude}\\delta[{var_sym}]" if is_discrete else f"{req.amplitude}\\delta({var_sym})"
+        elif st == "step":
+            base_tex = f"{req.amplitude}u[{var_sym}]" if is_discrete else f"{req.amplitude}u({var_sym})"
+        elif st == "ramp":
+            base_tex = f"{req.amplitude}r({var_sym})"
+        elif st == "rect":
+            base_tex = f"{req.amplitude}\\text{{rect}}\\left(\\frac{{{var_sym}}}{{{req.pulse_width}}}\\right)"
+        elif st == "sine":
+            base_tex = f"{req.amplitude}\\sin({req.frequency}{var_sym} + {req.phase})"
+        elif st == "cosine":
+            base_tex = f"{req.amplitude}\\cos({req.frequency}{var_sym} + {req.phase})"
+        elif st == "exponential":
+            base_tex = f"{req.amplitude}e^{{{req.decay}{var_sym}}} u({var_sym})"
+        else:
+            base_tex = f"{req.amplitude}\\text{{sinc}}({var_sym})"
+
+        shift_str = f" - {req.time_shift}" if req.time_shift > 0 else (f" + {abs(req.time_shift)}" if req.time_shift < 0 else "")
+        rev_str = "-" if req.time_reversal else ""
+        scale_str = f"{abs(req.time_scaling)}" if abs(req.time_scaling) != 1.0 else ""
+        inner_trans = f"{rev_str}{scale_str}({var_sym}{shift_str})" if shift_str else f"{rev_str}{scale_str}{var_sym}"
+        amp_prefix = f"{req.amp_scale} \\cdot " if req.amp_scale != 1.0 else ""
+        trans_tex = f"{amp_prefix}x({inner_trans})" if not is_discrete else f"{amp_prefix}x[{inner_trans}]"
+
+        y_vals = np.array([pt["y"] for pt in original_samples])
+        trapz_func = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+        energy = float(np.sum(y_vals ** 2)) if is_discrete else float(trapz_func(y_vals ** 2, t_axis) if trapz_func else np.sum(y_vals**2)*(t_axis[1]-t_axis[0]))
+
+        return {
+            "success": True,
+            "signal_type": req.signal_type,
+            "domain": req.domain,
+            "base_latex": base_tex,
+            "transformed_latex": trans_tex,
+            "energy": round(energy, 4),
+            "original_samples": original_samples,
+            "transformed_samples": transformed_samples
+        }
+    except Exception as e:
+        return {"error": f"Signal generation error: {str(e)}"}
+
+
+class ConvolutionRequest(BaseModel):
+    preset_x: str = Field("rect", description="Signal x: rect, step, exponential, ramp, impulse")
+    preset_h: str = Field("rect", description="Signal h: rect, step, exponential, ramp, impulse")
+    domain: str = Field("discrete", description="discrete or continuous")
+    current_shift: float = Field(0.0, description="Current shift parameter n or t")
+
+
+@app.post("/signals/convolution")
+def compute_convolution(req: ConvolutionRequest):
+    try:
+        is_discrete = req.domain.lower() == "discrete"
+
+        if is_discrete:
+            k_min, k_max = -8, 8
+            k_axis = np.arange(k_min, k_max + 1)
+
+            def sample_discrete(preset: str, k_arr: np.ndarray):
+                if preset == "rect":
+                    return np.where((k_arr >= 0) & (k_arr <= 3), 1.0, 0.0)
+                elif preset == "step":
+                    return np.where((k_arr >= 0) & (k_arr <= 5), 1.0, 0.0)
+                elif preset == "exponential":
+                    return np.where((k_arr >= 0) & (k_arr <= 5), (0.7) ** k_arr, 0.0)
+                elif preset == "ramp":
+                    return np.where((k_arr >= 0) & (k_arr <= 4), k_arr * 0.5, 0.0)
+                elif preset == "impulse":
+                    return np.where(k_arr == 0, 1.0, 0.0)
+                return np.where((k_arr >= 0) & (k_arr <= 3), 1.0, 0.0)
+
+            x_vals = sample_discrete(req.preset_x, k_axis)
+            h_vals = sample_discrete(req.preset_h, k_axis)
+
+            full_conv = np.convolve(x_vals, h_vals)
+            n_out_min = 2 * k_min
+            n_out_max = 2 * k_max
+            n_out_axis = np.arange(n_out_min, n_out_max + 1)
+
+            current_n = int(round(req.current_shift))
+            h_folded_shifted = sample_discrete(req.preset_h, current_n - k_axis)
+            product_k = x_vals * h_folded_shifted
+            current_sum = float(np.sum(product_k))
+
+            x_points = [{"k": int(k), "y": float(y)} for k, y in zip(k_axis, x_vals)]
+            h_points = [{"k": int(k), "y": float(y)} for k, y in zip(k_axis, h_folded_shifted)]
+            product_points = [{"k": int(k), "y": float(y)} for k, y in zip(k_axis, product_k)]
+
+            y_points = []
+            for n_val, y_val in zip(n_out_axis, full_conv):
+                if -10 <= n_val <= 10:
+                    y_points.append({"n": int(n_val), "y": round(float(y_val), 4)})
+
+            return {
+                "success": True,
+                "domain": "discrete",
+                "current_shift": current_n,
+                "instant_value": round(current_sum, 4),
+                "x_points": x_points,
+                "h_folded_points": h_points,
+                "product_points": product_points,
+                "output_points": y_points,
+                "formula_latex": "y[n] = \\sum_{k=-\\infty}^{\\infty} x[k] h[n - k]"
+            }
+        else:
+            tau_axis = np.linspace(-6.0, 6.0, 241)
+            d_tau = tau_axis[1] - tau_axis[0]
+
+            def sample_continuous(preset: str, t_arr: np.ndarray):
+                if preset == "rect":
+                    return np.where((t_arr >= -1.0) & (t_arr <= 1.0), 1.0, 0.0)
+                elif preset == "step":
+                    return np.where((t_arr >= 0.0) & (t_arr <= 3.0), 1.0, 0.0)
+                elif preset == "exponential":
+                    return np.where((t_arr >= 0.0) & (t_arr <= 4.0), np.exp(-t_arr), 0.0)
+                elif preset == "ramp":
+                    return np.where((t_arr >= 0.0) & (t_arr <= 2.0), t_arr, 0.0)
+                elif preset == "impulse":
+                    return np.where(np.abs(t_arr) <= 0.08, 1.0, 0.0)
+                return np.where((t_arr >= -1.0) & (t_arr <= 1.0), 1.0, 0.0)
+
+            x_vals = sample_continuous(req.preset_x, tau_axis)
+            t_curr = float(req.current_shift)
+            h_folded = sample_continuous(req.preset_h, t_curr - tau_axis)
+            product = x_vals * h_folded
+            instant_integral = float(np.sum(product) * d_tau)
+
+            t_sweep = np.linspace(-5.0, 5.0, 101)
+            output_curve = []
+            for t_val in t_sweep:
+                h_shift = sample_continuous(req.preset_h, t_val - tau_axis)
+                val = float(np.sum(x_vals * h_shift) * d_tau)
+                output_curve.append({"t": round(float(t_val), 3), "y": round(val, 4)})
+
+            return {
+                "success": True,
+                "domain": "continuous",
+                "current_shift": round(t_curr, 3),
+                "instant_value": round(instant_integral, 4),
+                "x_points": [{"t": round(float(t), 3), "y": round(float(y), 4)} for t, y in zip(tau_axis, x_vals)],
+                "h_folded_points": [{"t": round(float(t), 3), "y": round(float(y), 4)} for t, y in zip(tau_axis, h_folded)],
+                "product_points": [{"t": round(float(t), 3), "y": round(float(y), 4)} for t, y in zip(tau_axis, product)],
+                "output_points": output_curve,
+                "formula_latex": "y(t) = \\int_{-\\infty}^{\\infty} x(\\tau) h(t - \\tau) d\\tau"
+            }
+    except Exception as e:
+        return {"error": f"Convolution error: {str(e)}"}
+
+
+# ========================================================
+# PRACTICE MODE & STEP-BY-STEP SOLVER ENDPOINTS
+# ========================================================
+
+PRACTICE_PROBLEMS = [
+    {
+        "id": "calc_deriv_1",
+        "category": "calculus",
+        "topic": "Derivatives & Chain Rule",
+        "difficulty": "Fundamentals",
+        "question": "Find the first derivative $\\frac{d}{dx} \\left[ (3x^2 - 4)^5 \\right]$.",
+        "options": [
+            "30x(3x^2 - 4)^4",
+            "5(3x^2 - 4)^4",
+            "15x(3x^2 - 4)^4",
+            "30x^2(3x^2 - 4)^4"
+        ],
+        "correct_index": 0,
+        "hint": "Use the Chain Rule: if $y = u^5$ and $u = 3x^2 - 4$, then $\\frac{dy}{dx} = 5u^4 \\cdot \\frac{du}{dx}$.",
+        "steps": [
+            {"title": "Identify Inner & Outer Functions", "content": "Let outer function $g(u) = u^5$ and inner function $u(x) = 3x^2 - 4$."},
+            {"title": "Differentiate Outer Function", "content": "$\\frac{d}{du}[u^5] = 5u^4 = 5(3x^2 - 4)^4$."},
+            {"title": "Differentiate Inner Function", "content": "$\\frac{d}{dx}[3x^2 - 4] = 6x$."},
+            {"title": "Multiply via Chain Rule", "content": "$\\frac{dy}{dx} = 5(3x^2 - 4)^4 \\cdot (6x) = 30x(3x^2 - 4)^4$."}
+        ]
+    },
+    {
+        "id": "calc_mvt_1",
+        "category": "calculus",
+        "topic": "Mean Value Theorem",
+        "difficulty": "Standard",
+        "question": "For $f(x) = x^3 - x$ on $[0, 2]$, find the value of $c \\in (0, 2)$ guaranteed by the Mean Value Theorem.",
+        "options": [
+            "\\frac{2}{\\sqrt{3}}",
+            "\\frac{1}{\\sqrt{3}}",
+            "\\sqrt{2}",
+            "1.0"
+        ],
+        "correct_index": 0,
+        "hint": "Calculate the secant slope $m = \\frac{f(2) - f(0)}{2 - 0}$, then solve $f'(c) = m$.",
+        "steps": [
+            {"title": "Compute Secant Slope", "content": "$f(0) = 0$, $f(2) = 2^3 - 2 = 6$. Secant slope $m = \\frac{6 - 0}{2 - 0} = 3$."},
+            {"title": "Find Derivative f'(x)", "content": "$f'(x) = 3x^2 - 1$."},
+            {"title": "Equate f'(c) = m", "content": "$3c^2 - 1 = 3 \\implies 3c^2 = 4 \\implies c^2 = \\frac{4}{3}$."},
+            {"title": "Select Root in (0, 2)", "content": "$c = \\frac{2}{\\sqrt{3}} = \\frac{2\\sqrt{3}}{3} \\approx 1.155 \\in (0, 2)$."}
+        ]
+    },
+    {
+        "id": "calc_integral_1",
+        "category": "calculus",
+        "topic": "Definite Integration",
+        "difficulty": "Standard",
+        "question": "Evaluate the definite integral $\\int_0^1 x e^{x^2} dx$.",
+        "options": [
+            "\\frac{e - 1}{2}",
+            "e - 1",
+            "\\frac{e}{2}",
+            "\\frac{e + 1}{2}"
+        ],
+        "correct_index": 0,
+        "hint": "Use u-substitution with $u = x^2$, so $du = 2x\\,dx$.",
+        "steps": [
+            {"title": "Substitution", "content": "Let $u = x^2 \\implies du = 2x\\,dx \\implies x\\,dx = \\frac{du}{2}$."},
+            {"title": "Change Limits", "content": "When $x = 0 \\implies u = 0$. When $x = 1 \\implies u = 1$."},
+            {"title": "Integrate in u", "content": "$\\int_0^1 \\frac{1}{2} e^u du = \\left[ \\frac{1}{2} e^u \\right]_0^1 = \\frac{e^1 - e^0}{2} = \\frac{e - 1}{2}$."}
+        ]
+    },
+    {
+        "id": "sig_trans_1",
+        "category": "signals",
+        "topic": "Signal Transformations",
+        "difficulty": "Fundamentals",
+        "question": "Given signal $x(t)$, which operation correctly represents $y(t) = x(2t + 4)$ using the standard order of operations?",
+        "options": [
+            "Shift left by 4, then compress in time by a factor of 2",
+            "Shift right by 4, then expand in time by a factor of 2",
+            "Compress by 2, then shift left by 4",
+            "Shift right by 2, then compress by 2"
+        ],
+        "correct_index": 0,
+        "hint": "Express as $x(2(t + 2))$ or follow: 1) shift first $t \\to t + 4$, then scale $t \\to 2t$.",
+        "steps": [
+            {"title": "Approach 1: Shift then Scale", "content": "Start with $x(t)$. First shift left by 4 units: $x(t) \\to x(t + 4)$. Then replace $t$ with $2t$: $x(2t + 4)$ (time compression by 2)."},
+            {"title": "Approach 2: Factor Form x(a(t - t0))", "content": "Rewrite $x(2t + 4) = x(2(t + 2))$. Here $t_0 = -2$, meaning compress by 2 and advance (shift left) by 2."},
+            {"title": "Conclusion", "content": "Both methods confirm: shift left by 4 then compress by 2, or compress by 2 then shift left by 2."}
+        ]
+    },
+    {
+        "id": "sig_conv_1",
+        "category": "signals",
+        "topic": "Discrete Convolution",
+        "difficulty": "Standard",
+        "question": "Compute the linear convolution of $x[n] = \\{1, 2\\}$ and $h[n] = \\{1, 1\\}$, both starting at $n=0$. What is $y[1]$?",
+        "options": [
+            "3",
+            "2",
+            "1",
+            "4"
+        ],
+        "correct_index": 0,
+        "hint": "$y[1] = x[0]h[1] + x[1]h[0]$.",
+        "steps": [
+            {"title": "Convolution Sum Formula", "content": "$y[n] = \\sum_k x[k] h[n - k]$."},
+            {"title": "Evaluate at n = 0", "content": "$y[0] = x[0]h[0] = 1 \\cdot 1 = 1$."},
+            {"title": "Evaluate at n = 1", "content": "$y[1] = x[0]h[1] + x[1]h[0] = (1)(1) + (2)(1) = 1 + 2 = 3$."},
+            {"title": "Full Sequence", "content": "$y[n] = \\{1, 3, 2\\}$ starting at $n = 0$."}
+        ]
+    },
+    {
+        "id": "sig_lti_1",
+        "category": "signals",
+        "topic": "BIBO Stability",
+        "difficulty": "Challenge",
+        "question": "A discrete LTI system has impulse response $h[n] = (0.8)^n u[n]$. Is this system BIBO stable?",
+        "options": [
+            "Yes, because \\sum_{n=-\\infty}^\\infty |h[n]| = \\frac{1}{1 - 0.8} = 5 < \\infty",
+            "No, because the response extends to infinity",
+            "Yes, because h[0] is finite",
+            "No, because |h[n]| does not reach zero"
+        ],
+        "correct_index": 0,
+        "hint": "A discrete LTI system is BIBO stable if and only if its impulse response is absolutely summable: $\\sum_{n=-\\infty}^\\infty |h[n]| < \\infty$.",
+        "steps": [
+            {"title": "BIBO Stability Criterion", "content": "For discrete-time LTI systems, stability requires $\\sum_{n=-\\infty}^\\infty |h[n]| < \\infty$."},
+            {"title": "Sum the Absolute Impulse Response", "content": "$\\sum_{n=0}^\\infty |0.8|^n = \\sum_{n=0}^\\infty 0.8^n$."},
+            {"title": "Infinite Geometric Series", "content": "Since $|r| = 0.8 < 1$, the sum converges to $\\frac{a}{1 - r} = \\frac{1}{1 - 0.8} = \\frac{1}{0.2} = 5 < \\infty$."},
+            {"title": "Conclusion", "content": "The absolute sum is finite ($5 < \\infty$), so the system is strictly BIBO stable."}
+        ]
+    }
+]
+
+
+@app.get("/practice/problems")
+def get_practice_problems(category: str | None = None):
+    if category:
+        filtered = [p for p in PRACTICE_PROBLEMS if p["category"].lower() == category.lower()]
+        return {"problems": filtered}
+    return {"problems": PRACTICE_PROBLEMS}
+
+
+class VerifyAnswerRequest(BaseModel):
+    problem_id: str
+    selected_index: int
+
+
+@app.post("/practice/verify")
+def verify_practice_answer(req: VerifyAnswerRequest):
+    prob = next((p for p in PRACTICE_PROBLEMS if p["id"] == req.problem_id), None)
+    if not prob:
+        return {"error": "Problem not found."}
+
+    is_correct = (req.selected_index == prob["correct_index"])
+    return {
+        "success": True,
+        "is_correct": is_correct,
+        "correct_index": prob["correct_index"],
+        "hint": prob["hint"],
+        "steps": prob["steps"]
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

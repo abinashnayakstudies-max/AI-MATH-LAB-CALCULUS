@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi.testclient import TestClient
 from app import app
 
@@ -78,6 +82,53 @@ def test_riemann_sum():
     print(f"[PASS] Riemann sum midpoint n=6: sum={data['riemann_sum']}, exact={data['exact_integral']}, error={data['error']}")
     assert len(data["rectangles"]) == 6
 
+def test_signals_generate():
+    r = client.post("/signals/generate", json={
+        "signal_type": "step",
+        "domain": "continuous",
+        "time_start": -3.0,
+        "time_end": 3.0,
+        "amplitude": 1.0,
+        "time_shift": 1.0,
+        "time_scaling": 2.0,
+        "time_reversal": False,
+        "amp_scale": 1.5
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert len(data["original_samples"]) > 0
+    assert len(data["transformed_samples"]) > 0
+    print(f"[PASS] Signals Generate step: base={data['base_latex']}, transformed={data['transformed_latex']}")
+
+def test_signals_convolution():
+    r = client.post("/signals/convolution", json={
+        "preset_x": "rect",
+        "preset_h": "rect",
+        "domain": "discrete",
+        "current_shift": 2.0
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert len(data["output_points"]) > 0
+    print(f"[PASS] Discrete Convolution rect*rect: instant={data['instant_value']} at n={data['current_shift']}")
+
+def test_practice_mode():
+    r = client.get("/practice/problems?category=calculus")
+    assert r.status_code == 200
+    probs = r.json()["problems"]
+    assert len(probs) > 0
+    p0 = probs[0]
+    print(f"[PASS] Practice Problems: fetched {len(probs)} calculus problems, first={p0['id']}")
+
+    r2 = client.post("/practice/verify", json={"problem_id": p0["id"], "selected_index": p0["correct_index"]})
+    assert r2.status_code == 200
+    res = r2.json()
+    assert res["is_correct"] is True
+    assert len(res["steps"]) > 0
+    print("[PASS] Practice Verify: verified answer correctly with step-by-step breakdown")
+
 if __name__ == "__main__":
     test_root()
     test_health()
@@ -87,4 +138,7 @@ if __name__ == "__main__":
     test_critical_points()
     test_taylor()
     test_riemann_sum()
-    print("\nALL BACKEND UNIT TESTS PASSED WITH 100% SUCCESS!")
+    test_signals_generate()
+    test_signals_convolution()
+    test_practice_mode()
+    print("\nALL BACKEND UNIT TESTS (INCLUDING SIGNALS & PRACTICE) PASSED WITH 100% SUCCESS!")

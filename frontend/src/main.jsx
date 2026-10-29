@@ -6,6 +6,7 @@ import {
   Crosshair,
   FlaskConical,
   Play,
+  Pause,
   RotateCcw,
   Sparkles,
   Layers,
@@ -21,7 +22,13 @@ import {
   ChevronDown,
   ChevronUp,
   BookOpen,
-  ArrowRight
+  ArrowRight,
+  Radio,
+  HelpCircle,
+  CheckCircle2,
+  XCircle,
+  Lightbulb,
+  GraduationCap
 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -615,12 +622,1276 @@ function MathKeypad({ onInsert }) {
 }
 
 // ----------------------------------------------------
+
+// ====================================================
+// SIGNALS & SYSTEMS: SIGNAL PLOT (CONTINUOUS & STEM)
+// ====================================================
+function SignalPlot({ originalSamples, transformedSamples, domain, signalType }) {
+  const [hoverPt, setHoverPt] = useState(null);
+  const isDiscrete = domain === "discrete";
+
+  const allPts = useMemo(() => {
+    return [...(originalSamples || []), ...(transformedSamples || [])];
+  }, [originalSamples, transformedSamples]);
+
+  if (!originalSamples?.length) {
+    return <div className="result-empty">Configure parameters and click "Generate & Transform" to render signal.</div>;
+  }
+
+  const xs = allPts.map(p => p.t);
+  const ys = allPts.map(p => p.y);
+  const minX = Math.min(...xs, 0);
+  const maxX = Math.max(...xs, 0);
+  let minY = Math.min(...ys, 0);
+  let maxY = Math.max(...ys, 0);
+
+  if (Math.abs(maxY - minY) < 0.1) {
+    minY -= 1;
+    maxY += 1;
+  } else {
+    const pad = (maxY - minY) * 0.18;
+    minY -= pad;
+    maxY += pad;
+  }
+
+  const svgW = 760;
+  const svgH = 340;
+  const margin = { left: 55, right: 35, top: 25, bottom: 45 };
+  const plotW = svgW - margin.left - margin.right;
+  const plotH = svgH - margin.top - margin.bottom;
+
+  const mapX = val => margin.left + ((val - minX) / (maxX - minX || 1)) * plotW;
+  const mapY = val => margin.top + ((maxY - val) / (maxY - minY || 1)) * plotH;
+
+  const yZero = mapY(0);
+  const xZero = mapX(0);
+
+  const xTicks = [];
+  const xStep = Math.max(1, Math.round((maxX - minX) / 8));
+  for (let xVal = Math.ceil(minX); xVal <= Math.floor(maxX); xVal += xStep) {
+    xTicks.push(xVal);
+  }
+
+  const yTicks = [
+    minY + (maxY - minY) * 0.1,
+    minY + (maxY - minY) * 0.35,
+    0,
+    minY + (maxY - minY) * 0.65,
+    minY + (maxY - minY) * 0.9
+  ].filter((v, i, self) => self.findIndex(t => Math.abs(t - v) < 0.05) === i);
+
+  const buildPath = samples => {
+    if (!samples?.length) return "";
+    return samples.reduce(
+      (acc, pt, i) => `${acc} ${i === 0 ? "M" : "L"} ${mapX(pt.t).toFixed(1)} ${mapY(pt.y).toFixed(1)}`,
+      ""
+    );
+  };
+
+  const origPath = !isDiscrete ? buildPath(originalSamples) : "";
+  const transPath = !isDiscrete ? buildPath(transformedSamples) : "";
+
+  return (
+    <div className="signal-plot-wrapper">
+      <svg
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        className="signal-svg"
+        onMouseMove={e => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const svgX = (mouseX / rect.width) * svgW;
+          const tVal = minX + ((svgX - margin.left) / plotW) * (maxX - minX);
+          if (originalSamples?.length) {
+            let closest = originalSamples[0];
+            let closestDist = Math.abs(closest.t - tVal);
+            for (const pt of originalSamples) {
+              const d = Math.abs(pt.t - tVal);
+              if (d < closestDist) {
+                closest = pt;
+                closestDist = d;
+              }
+            }
+            const transMatch = transformedSamples?.find(tp => Math.abs(tp.t - closest.t) < 0.001);
+            setHoverPt({ t: closest.t, yOrig: closest.y, yTrans: transMatch?.y ?? null });
+          }
+        }}
+        onMouseLeave={() => setHoverPt(null)}
+      >
+        {/* Horizontal grid lines & ticks */}
+        {yTicks.map((yVal, i) => {
+          const py = mapY(yVal);
+          return (
+            <g key={`ygrid-${i}`}>
+              <line
+                x1={margin.left}
+                y1={py}
+                x2={svgW - margin.right}
+                y2={py}
+                stroke="rgba(245, 239, 230, 0.06)"
+                strokeDasharray="3 3"
+              />
+              <text
+                x={margin.left - 10}
+                y={py + 4}
+                fill="#a3b5a5"
+                fontSize="11"
+                textAnchor="end"
+                fontFamily="JetBrains Mono, monospace"
+              >
+                {yVal.toFixed(1)}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Vertical grid lines & ticks */}
+        {xTicks.map((xVal, i) => {
+          const px = mapX(xVal);
+          return (
+            <g key={`xgrid-${i}`}>
+              <line
+                x1={px}
+                y1={margin.top}
+                x2={px}
+                y2={svgH - margin.bottom}
+                stroke="rgba(245, 239, 230, 0.06)"
+                strokeDasharray="3 3"
+              />
+              <text
+                x={px}
+                y={svgH - margin.bottom + 20}
+                fill="#a3b5a5"
+                fontSize="11"
+                textAnchor="middle"
+                fontFamily="JetBrains Mono, monospace"
+              >
+                {xVal}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Zero Axes */}
+        {yZero >= margin.top && yZero <= svgH - margin.bottom && (
+          <line
+            x1={margin.left}
+            y1={yZero}
+            x2={svgW - margin.right}
+            y2={yZero}
+            stroke="rgba(245, 239, 230, 0.3)"
+            strokeWidth="1.5"
+          />
+        )}
+        {xZero >= margin.left && xZero <= svgW - margin.right && (
+          <line
+            x1={xZero}
+            y1={margin.top}
+            x2={xZero}
+            y2={svgH - margin.bottom}
+            stroke="rgba(245, 239, 230, 0.3)"
+            strokeWidth="1.5"
+          />
+        )}
+
+        {/* Axis Labels */}
+        <text
+          x={svgW - margin.right}
+          y={yZero - 8}
+          fill="#f5efe6"
+          fontSize="12"
+          textAnchor="end"
+          fontFamily="JetBrains Mono, monospace"
+        >
+          {isDiscrete ? "n" : "t"}
+        </text>
+        <text
+          x={xZero + 8}
+          y={margin.top + 10}
+          fill="#f5efe6"
+          fontSize="12"
+          fontFamily="JetBrains Mono, monospace"
+        >
+          Amplitude
+        </text>
+
+        {/* CONTINUOUS CURVES */}
+        {!isDiscrete && (
+          <>
+            {origPath && (
+              <path
+                d={origPath}
+                fill="none"
+                stroke="#f5efe6"
+                strokeWidth="2.0"
+                opacity="0.75"
+                strokeDasharray="5 3"
+              />
+            )}
+            {transPath && (
+              <path
+                d={transPath}
+                fill="none"
+                stroke="#c23b60"
+                strokeWidth="2.8"
+              />
+            )}
+          </>
+        )}
+
+        {/* DISCRETE STEM PLOT */}
+        {isDiscrete && (
+          <>
+            {/* Original Signal Stems */}
+            {originalSamples.map((pt, i) => {
+              const cx = mapX(pt.t);
+              const cy = mapY(pt.y);
+              return (
+                <g key={`orig-stem-${i}`} opacity="0.6">
+                  <line
+                    x1={cx}
+                    y1={yZero}
+                    x2={cx}
+                    y2={cy}
+                    stroke="#f5efe6"
+                    strokeWidth="1.8"
+                    strokeDasharray="3 2"
+                  />
+                  <circle cx={cx} cy={cy} r="3.5" fill="#f5efe6" />
+                </g>
+              );
+            })}
+            {/* Transformed Signal Stems */}
+            {transformedSamples.map((pt, i) => {
+              const cx = mapX(pt.t);
+              const cy = mapY(pt.y);
+              return (
+                <g key={`trans-stem-${i}`}>
+                  <line
+                    x1={cx}
+                    y1={yZero}
+                    x2={cx}
+                    y2={cy}
+                    stroke="#c23b60"
+                    strokeWidth="2.4"
+                  />
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r="4.5"
+                    fill="#c23b60"
+                    stroke="#781d39"
+                    strokeWidth="1.2"
+                  />
+                </g>
+              );
+            })}
+          </>
+        )}
+
+        {/* Hover Crosshair */}
+        {hoverPt && (
+          <g>
+            <line
+              x1={mapX(hoverPt.t)}
+              y1={margin.top}
+              x2={mapX(hoverPt.t)}
+              y2={svgH - margin.bottom}
+              stroke="rgba(194, 59, 96, 0.6)"
+              strokeDasharray="3 3"
+            />
+            <circle
+              cx={mapX(hoverPt.t)}
+              cy={mapY(hoverPt.yOrig)}
+              r="5"
+              fill="#f5efe6"
+              stroke="#0d0b0e"
+              strokeWidth="2"
+            />
+            {hoverPt.yTrans != null && (
+              <circle
+                cx={mapX(hoverPt.t)}
+                cy={mapY(hoverPt.yTrans)}
+                r="6"
+                fill="#c23b60"
+                stroke="#f5efe6"
+                strokeWidth="2"
+              />
+            )}
+          </g>
+        )}
+      </svg>
+
+      {/* Legend & Hover Info */}
+      <div className="signal-plot-footer">
+        <div className="plot-legend">
+          <div className="legend-item">
+            <span className="legend-marker base-marker" />
+            <span>Base Signal x({isDiscrete ? "n" : "t"})</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-marker trans-marker" />
+            <span>Transformed Signal y({isDiscrete ? "n" : "t"})</span>
+          </div>
+        </div>
+
+        {hoverPt && (
+          <div className="hover-badge">
+            <span>{isDiscrete ? `n = ${hoverPt.t}` : `t = ${hoverPt.t.toFixed(2)}`}</span>
+            <span>x = {hoverPt.yOrig.toFixed(3)}</span>
+            {hoverPt.yTrans != null && <span>y = {hoverPt.yTrans.toFixed(3)}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ====================================================
+// CONVOLUTION SUB-TRACK SVG COMPONENT
+// ====================================================
+function ConvTrackSvg({ points, domain, strokeColor, fillColor, showArea = false, activePoint = null }) {
+  if (!points?.length) return <div className="result-empty">No data points.</div>;
+  const isDisc = domain === "discrete";
+  const xs = points.map(p => (isDisc ? (p.k ?? p.n) : p.t));
+  const ys = points.map(p => p.y);
+  const minX = Math.min(...xs, 0);
+  const maxX = Math.max(...xs, 0);
+  let minY = Math.min(...ys, 0);
+  let maxY = Math.max(...ys, 0);
+
+  if (Math.abs(maxY - minY) < 0.1) {
+    minY -= 1;
+    maxY += 1;
+  } else {
+    const pad = (maxY - minY) * 0.2;
+    minY -= pad;
+    maxY += pad;
+  }
+
+  const svgW = 440;
+  const svgH = 140;
+  const margin = { left: 40, right: 25, top: 15, bottom: 25 };
+  const plotW = svgW - margin.left - margin.right;
+  const plotH = svgH - margin.top - margin.bottom;
+
+  const mapX = val => margin.left + ((val - minX) / (maxX - minX || 1)) * plotW;
+  const mapY = val => margin.top + ((maxY - val) / (maxY - minY || 1)) * plotH;
+  const yZero = mapY(0);
+  const xZero = mapX(0);
+
+  let pathD = "";
+  let areaD = "";
+  if (!isDisc) {
+    pathD = points.reduce((acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${mapX(p.t).toFixed(1)} ${mapY(p.y).toFixed(1)}`, "");
+    if (showArea && points.length > 1) {
+      areaD = `${pathD} L ${mapX(points[points.length - 1].t).toFixed(1)} ${yZero} L ${mapX(points[0].t).toFixed(1)} ${yZero} Z`;
+    }
+  }
+
+  return (
+    <svg viewBox={`0 0 ${svgW} ${svgH}`} className="conv-track-svg">
+      <line x1={margin.left} y1={yZero} x2={svgW - margin.right} y2={yZero} stroke="rgba(245, 239, 230, 0.2)" strokeWidth="1" />
+      <line x1={xZero} y1={margin.top} x2={xZero} y2={svgH - margin.bottom} stroke="rgba(245, 239, 230, 0.2)" strokeWidth="1" />
+
+      {showArea && areaD && <path d={areaD} fill={fillColor || "rgba(194, 59, 96, 0.25)"} />}
+      {!isDisc && pathD && <path d={pathD} fill="none" stroke={strokeColor || "#f5efe6"} strokeWidth="2" />}
+
+      {isDisc && points.map((p, i) => {
+        const valX = p.k ?? p.n;
+        const cx = mapX(valX);
+        const cy = mapY(p.y);
+        return (
+          <g key={i}>
+            <line x1={cx} y1={yZero} x2={cx} y2={cy} stroke={strokeColor || "#c23b60"} strokeWidth="1.8" />
+            <circle cx={cx} cy={cy} r="3.5" fill={strokeColor || "#c23b60"} />
+          </g>
+        );
+      })}
+
+      {activePoint != null && (
+        <g>
+          <line
+            x1={mapX(activePoint.x)}
+            y1={margin.top}
+            x2={mapX(activePoint.x)}
+            y2={svgH - margin.bottom}
+            stroke="rgba(194, 59, 96, 0.8)"
+            strokeDasharray="3 3"
+          />
+          <circle cx={mapX(activePoint.x)} cy={mapY(activePoint.y)} r="5.5" fill="#c23b60" stroke="#f5efe6" strokeWidth="2" />
+        </g>
+      )}
+    </svg>
+  );
+}
+
+// ====================================================
+// MODULE 07: SIGNAL EXPLORER COMPONENT
+// ====================================================
+function SignalExplorer() {
+  const [signalType, setSignalType] = useState("step");
+  const [domain, setDomain] = useState("continuous");
+  const [timeStart, setTimeStart] = useState("-5");
+  const [timeEnd, setTimeEnd] = useState("5");
+  const [amplitude, setAmplitude] = useState("1");
+  const [frequency, setFrequency] = useState("1");
+  const [phase, setPhase] = useState("0");
+  const [decay, setDecay] = useState("-0.5");
+  const [pulseWidth, setPulseWidth] = useState("2");
+  const [timeShift, setTimeShift] = useState("0");
+  const [timeScaling, setTimeScaling] = useState("1");
+  const [timeReversal, setTimeReversal] = useState(false);
+  const [ampScale, setAmpScale] = useState("1");
+
+  const [signalResult, setSignalResult] = useState(null);
+  const [signalLoading, setSignalLoading] = useState(false);
+
+  const generateSignal = useCallback(async () => {
+    setSignalLoading(true);
+    try {
+      const response = await fetch(`${API}/signals/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signal_type: signalType,
+          domain: domain,
+          time_start: Number(timeStart),
+          time_end: Number(timeEnd),
+          amplitude: Number(amplitude),
+          frequency: Number(frequency),
+          phase: Number(phase),
+          decay: Number(decay),
+          pulse_width: Number(pulseWidth),
+          time_shift: Number(timeShift),
+          time_scaling: Number(timeScaling),
+          time_reversal: Boolean(timeReversal),
+          amp_scale: Number(ampScale)
+        })
+      });
+      const data = await response.json();
+      setSignalResult(data);
+    } catch {
+      setSignalResult({ error: "Signals service connection error." });
+    } finally {
+      setSignalLoading(false);
+    }
+  }, [signalType, domain, timeStart, timeEnd, amplitude, frequency, phase, decay, pulseWidth, timeShift, timeScaling, timeReversal, ampScale]);
+
+  useEffect(() => {
+    generateSignal();
+  }, []);
+
+  return (
+    <div className="signals-workspace">
+      {/* Parameter Controls Panel */}
+      <aside className="controls panel">
+        <div className="panel-title">
+          <span>01</span>
+          <div>
+            <h2>Signal Generator</h2>
+            <p>Select waveform and transformations.</p>
+          </div>
+        </div>
+
+        <div className="calculus-field">
+          <label>SIGNAL FAMILY</label>
+          <select value={signalType} onChange={e => setSignalType(e.target.value)}>
+            <option value="step">Unit Step u(t) / u[n]</option>
+            <option value="impulse">Unit Impulse δ(t) / δ[n]</option>
+            <option value="ramp">Unit Ramp r(t) / r[n]</option>
+            <option value="rect">Rectangular Pulse rect(t/τ)</option>
+            <option value="sine">Sinusoid sin(ωt)</option>
+            <option value="cosine">Cos Waveform cos(ωt)</option>
+            <option value="exponential">Decaying Exponential exp(-at)</option>
+            <option value="sinc">Sinc Pulse sinc(t)</option>
+          </select>
+        </div>
+
+        <div className="calculus-field">
+          <label>DOMAIN</label>
+          <div className="option-row">
+            <button
+              type="button"
+              className={domain === "continuous" ? "active" : ""}
+              onClick={() => setDomain("continuous")}
+            >
+              Continuous (t)
+            </button>
+            <button
+              type="button"
+              className={domain === "discrete" ? "active" : ""}
+              onClick={() => setDomain("discrete")}
+            >
+              Discrete [n] Stem
+            </button>
+          </div>
+        </div>
+
+        <div className="bounds">
+          <div>
+            <label>TIME START</label>
+            <input
+              value={timeStart}
+              onChange={e => setTimeStart(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+            />
+          </div>
+          <div>
+            <label>TIME END</label>
+            <input
+              value={timeEnd}
+              onChange={e => setTimeEnd(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+            />
+          </div>
+        </div>
+
+        <div className="bounds">
+          <div>
+            <label>AMPLITUDE A</label>
+            <input
+              value={amplitude}
+              onChange={e => setAmplitude(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+            />
+          </div>
+          {(signalType === "sine" || signalType === "cosine") && (
+            <div>
+              <label>FREQUENCY ω</label>
+              <input
+                value={frequency}
+                onChange={e => setFrequency(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+              />
+            </div>
+          )}
+          {signalType === "rect" && (
+            <div>
+              <label>PULSE WIDTH τ</label>
+              <input
+                value={pulseWidth}
+                onChange={e => setPulseWidth(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+              />
+            </div>
+          )}
+          {signalType === "exponential" && (
+            <div>
+              <label>DECAY RATE α</label>
+              <input
+                value={decay}
+                onChange={e => setDecay(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="panel-title" style={{ marginTop: "16px" }}>
+          <span>02</span>
+          <div>
+            <h2>Transformations y(t) = A·x(a(t - t₀))</h2>
+            <p>Shift, time scaling, reversal, amplitude.</p>
+          </div>
+        </div>
+
+        <div className="bounds">
+          <div>
+            <label>TIME SHIFT t₀ (Delay &gt; 0, Advance &lt; 0)</label>
+            <input
+              value={timeShift}
+              onChange={e => setTimeShift(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+            />
+          </div>
+          <div>
+            <label>TIME SCALE a (Compress &gt; 1, Expand &lt; 1)</label>
+            <input
+              value={timeScaling}
+              onChange={e => setTimeScaling(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+            />
+          </div>
+        </div>
+
+        <div className="bounds">
+          <div>
+            <label>AMPLITUDE SCALE A</label>
+            <input
+              value={ampScale}
+              onChange={e => setAmpScale(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: "4px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={timeReversal}
+                onChange={e => setTimeReversal(e.target.checked)}
+                style={{ width: "16px", height: "16px", accentColor: "var(--accent-crimson)" }}
+              />
+              <span style={{ fontSize: "12px", color: "var(--text-main)" }}>Time Reversal x(-t)</span>
+            </label>
+          </div>
+        </div>
+
+        <button className="primary-button" onClick={generateSignal} disabled={signalLoading}>
+          <Play size={15} />
+          {signalLoading ? "Generating Waveform…" : "Generate & Transform"}
+        </button>
+
+        {/* Quick presets */}
+        <div className="presets-strip" style={{ marginTop: "14px" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Quick Presets:</span>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                setSignalType("step");
+                setTimeShift("2");
+                setTimeScaling("1");
+                setTimeReversal(false);
+              }}
+            >
+              Delayed Step u(t-2)
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                setSignalType("rect");
+                setPulseWidth("3");
+                setTimeShift("0");
+                setTimeScaling("2");
+                setTimeReversal(false);
+              }}
+            >
+              Compressed Rect rect(2t)
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                setSignalType("ramp");
+                setTimeShift("0");
+                setTimeScaling("1");
+                setTimeReversal(true);
+              }}
+            >
+              Reversed Ramp r(-t)
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                setSignalType("exponential");
+                setDecay("-0.8");
+                setTimeShift("0");
+                setTimeScaling("1");
+                setTimeReversal(false);
+              }}
+            >
+              Exp Decay exp(-0.8t)
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                setSignalType("sinc");
+                setTimeShift("0");
+                setTimeScaling("1");
+                setTimeReversal(false);
+              }}
+            >
+              Sinc Pulse sinc(t)
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* SVG Plot Center Stage */}
+      <section className="visual-panel panel">
+        <div className="plot-header">
+          <div>
+            <span className="badge-tag">INTERACTIVE SIGNAL VISUALIZER</span>
+            <h2>{domain === "discrete" ? "Discrete Stem Plot [n]" : "Continuous Waveform (t)"}</h2>
+          </div>
+          <span className="drag-note">Hover over waveform to inspect sample coordinates</span>
+        </div>
+
+        <SignalPlot
+          originalSamples={signalResult?.original_samples}
+          transformedSamples={signalResult?.transformed_samples}
+          domain={domain}
+          signalType={signalType}
+        />
+
+        <div className="plot-foot">
+          <span>Dual overlay: Base x({domain === "discrete" ? "n" : "t"}) vs Transformed y({domain === "discrete" ? "n" : "t"})</span>
+          <span>{signalResult?.original_samples ? `${signalResult.original_samples.length} points sampled` : "Awaiting run"}</span>
+        </div>
+      </section>
+
+      {/* Analytics & Metrics Sidebar */}
+      <aside className="results panel">
+        <div className="panel-title">
+          <span>03</span>
+          <div>
+            <h2>Analytical Properties</h2>
+            <p>Signal metrics &amp; KaTeX definitions.</p>
+          </div>
+        </div>
+
+        {!signalResult ? (
+          <div className="result-empty">Run signal generation to evaluate energy and transformation formulas.</div>
+        ) : signalResult.error ? (
+          <div className="error">{signalResult.error}</div>
+        ) : (
+          <>
+            <div className="verified-box">
+              <span>BASE SIGNAL x({domain === "discrete" ? "n" : "t"})</span>
+              <div style={{ marginTop: "6px" }}>
+                <MathFormula tex={signalResult.base_latex} block={true} />
+              </div>
+            </div>
+
+            <div className="verified-box" style={{ borderColor: "rgba(194, 59, 96, 0.4)", background: "rgba(120, 29, 57, 0.12)" }}>
+              <span style={{ color: "var(--accent-crimson)" }}>TRANSFORMED SIGNAL y({domain === "discrete" ? "n" : "t"})</span>
+              <div style={{ marginTop: "6px" }}>
+                <MathFormula tex={signalResult.transformed_latex} block={true} />
+              </div>
+            </div>
+
+            <div className="result-row highlight-row">
+              <span>Signal Energy E</span>
+              <b>{signalResult.energy != null ? signalResult.energy.toFixed(4) : "—"}</b>
+            </div>
+            <div className="result-row">
+              <span>Domain Classification</span>
+              <b>{domain === "discrete" ? "Discrete-Time [n]" : "Continuous-Time (t)"}</b>
+            </div>
+            <div className="result-row">
+              <span>Waveform Family</span>
+              <b style={{ textTransform: "capitalize" }}>{signalType}</b>
+            </div>
+
+            <div className="method-note" style={{ marginTop: "14px" }}>
+              <CircleHelp size={15} />
+              <span>
+                Energy is defined as {domain === "discrete" ? "E = ∑ |x[n]|²" : "E = ∫ |x(t)|² dt"}.
+                A signal is classified as an Energy Signal if 0 &lt; E &lt; ∞.
+              </span>
+            </div>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+// ====================================================
+// MODULE 08: CONVOLUTION VISUALIZER COMPONENT
+// ====================================================
+function ConvolutionVisualizer() {
+  const [presetX, setPresetX] = useState("rect");
+  const [presetH, setPresetH] = useState("rect");
+  const [domain, setDomain] = useState("continuous");
+  const [currentShift, setCurrentShift] = useState(0.0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [convResult, setConvResult] = useState(null);
+  const [convLoading, setConvLoading] = useState(false);
+
+  const computeConv = useCallback(async (shiftVal) => {
+    setConvLoading(true);
+    try {
+      const response = await fetch(`${API}/signals/convolution`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          preset_x: presetX,
+          preset_h: presetH,
+          domain: domain,
+          current_shift: Number(shiftVal)
+        })
+      });
+      const data = await response.json();
+      setConvResult(data);
+    } catch {
+      setConvResult({ error: "Convolution service connection error." });
+    } finally {
+      setConvLoading(false);
+    }
+  }, [presetX, presetH, domain]);
+
+  useEffect(() => {
+    computeConv(currentShift);
+  }, [presetX, presetH, domain]);
+
+  // Animation player
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setCurrentShift(prev => {
+        const step = domain === "discrete" ? 1 : 0.25;
+        let next = prev + step;
+        if (next > 4.5) next = -4.5;
+        const rounded = Math.round(next * 10) / 10;
+        computeConv(rounded);
+        return rounded;
+      });
+    }, 180);
+    return () => clearInterval(interval);
+  }, [isPlaying, domain, computeConv]);
+
+  return (
+    <div className="convolution-container">
+      {/* Control bar */}
+      <div className="conv-control-bar">
+        <div className="calculus-field" style={{ minWidth: "150px" }}>
+          <label>INPUT SIGNAL x</label>
+          <select value={presetX} onChange={e => setPresetX(e.target.value)}>
+            <option value="rect">Rectangular Pulse</option>
+            <option value="step">Unit Step</option>
+            <option value="exponential">Decaying Exponential</option>
+            <option value="ramp">Ramp</option>
+            <option value="impulse">Unit Impulse</option>
+          </select>
+        </div>
+
+        <div className="calculus-field" style={{ minWidth: "150px" }}>
+          <label>IMPULSE RESPONSE h</label>
+          <select value={presetH} onChange={e => setPresetH(e.target.value)}>
+            <option value="rect">Rectangular Pulse</option>
+            <option value="step">Unit Step</option>
+            <option value="exponential">Decaying Exponential</option>
+            <option value="ramp">Ramp</option>
+            <option value="impulse">Unit Impulse</option>
+          </select>
+        </div>
+
+        <div className="calculus-field" style={{ minWidth: "140px" }}>
+          <label>DOMAIN</label>
+          <select value={domain} onChange={e => { setDomain(e.target.value); setCurrentShift(0); }}>
+            <option value="continuous">Continuous (t)</option>
+            <option value="discrete">Discrete [n]</option>
+          </select>
+        </div>
+
+        {/* Shift Slider */}
+        <div className="conv-slider-group">
+          <label>
+            SHIFT PARAMETER {domain === "discrete" ? "n" : "t"} = {currentShift.toFixed(2)}
+          </label>
+          <div className="conv-slider-row">
+            <input
+              type="range"
+              min="-5"
+              max="5"
+              step={domain === "discrete" ? "1" : "0.1"}
+              value={currentShift}
+              onChange={e => {
+                const val = Number(e.target.value);
+                setCurrentShift(val);
+                computeConv(val);
+              }}
+            />
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                const step = domain === "discrete" ? 1 : 0.25;
+                const next = Math.max(-5, Math.round((currentShift - step) * 10) / 10);
+                setCurrentShift(next);
+                computeConv(next);
+              }}
+            >
+              - Step
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                const step = domain === "discrete" ? 1 : 0.25;
+                const next = Math.min(5, Math.round((currentShift + step) * 10) / 10);
+                setCurrentShift(next);
+                computeConv(next);
+              }}
+            >
+              + Step
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              style={{ padding: "6px 14px", height: "auto" }}
+              onClick={() => setIsPlaying(p => !p)}
+            >
+              {isPlaying ? <Pause size={13} /> : <Play size={13} />}
+              {isPlaying ? "Pause" : "Play Sweep"}
+            </button>
+          </div>
+        </div>
+
+        {/* Readout metric */}
+        <div className="verified-box" style={{ padding: "10px 18px", minWidth: "200px" }}>
+          <span style={{ fontSize: "11px" }}>INSTANT CONVOLUTION y({domain === "discrete" ? currentShift : currentShift.toFixed(2)})</span>
+          <strong style={{ fontSize: "20px" }}>{convResult?.instant_value?.toFixed(4) ?? "—"}</strong>
+        </div>
+      </div>
+
+      {/* 2x2 Synchronized Visualization Grid */}
+      <div className="conv-tracks">
+        {/* Track 1: Stationary x */}
+        <div className="conv-track-card">
+          <div className="conv-track-header">
+            <span>1. Stationary Input x({domain === "discrete" ? "k" : "τ"})</span>
+            <span style={{ color: "var(--accent-cream)", fontSize: "11px" }}>Reference Signal</span>
+          </div>
+          <ConvTrackSvg
+            points={convResult?.x_points}
+            domain={domain}
+            strokeColor="#f5efe6"
+          />
+        </div>
+
+        {/* Track 2: Folded and Shifted h */}
+        <div className="conv-track-card">
+          <div className="conv-track-header">
+            <span>2. Folded &amp; Shifted h({domain === "discrete" ? `${currentShift} - k` : `${currentShift.toFixed(1)} - τ`})</span>
+            <span style={{ color: "var(--accent-sage)", fontSize: "11px" }}>Sliding Kernel</span>
+          </div>
+          <ConvTrackSvg
+            points={convResult?.h_folded_points}
+            domain={domain}
+            strokeColor="#8a9e8c"
+          />
+        </div>
+
+        {/* Track 3: Product of Overlap */}
+        <div className="conv-track-card">
+          <div className="conv-track-header">
+            <span>3. Product x({domain === "discrete" ? "k" : "τ"}) · h({domain === "discrete" ? `${currentShift} - k` : `${currentShift.toFixed(1)} - τ`})</span>
+            <span style={{ color: "var(--accent-crimson)", fontSize: "11px" }}>Overlap Area = y({currentShift})</span>
+          </div>
+          <ConvTrackSvg
+            points={convResult?.product_points}
+            domain={domain}
+            strokeColor="#c23b60"
+            fillColor="rgba(194, 59, 96, 0.35)"
+            showArea={true}
+          />
+        </div>
+
+        {/* Track 4: Accumulated Output y */}
+        <div className="conv-track-card">
+          <div className="conv-track-header">
+            <span>4. Convolved Output y({domain === "discrete" ? "n" : "t"}) = (x * h)</span>
+            <span style={{ color: "var(--accent-crimson)", fontSize: "11px" }}>Full Trajectory</span>
+          </div>
+          <ConvTrackSvg
+            points={convResult?.output_points}
+            domain={domain}
+            strokeColor="#f5efe6"
+            activePoint={{ x: currentShift, y: convResult?.instant_value ?? 0 }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ====================================================
+// MODULE 09: STEP-BY-STEP SOLVER & PRACTICE MODE
+// ====================================================
+function PracticeSolver() {
+  const [problems, setProblems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [difficultyFilter, setDifficultyFilter] = useState("all");
+
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [verifications, setVerifications] = useState({});
+  const [showHints, setShowHints] = useState({});
+  const [showSolutions, setShowSolutions] = useState({});
+  const [verifyingId, setVerifyingId] = useState(null);
+
+  const fetchProblems = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/practice/problems`);
+      const data = await response.json();
+      if (data?.problems) {
+        setProblems(data.problems);
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProblems();
+  }, [fetchProblems]);
+
+  const selectOption = (problemId, optIndex) => {
+    setSelectedAnswers(prev => ({ ...prev, [problemId]: optIndex }));
+  };
+
+  const toggleHint = problemId => {
+    setShowHints(prev => ({ ...prev, [problemId]: !prev[problemId] }));
+  };
+
+  const toggleSolution = problemId => {
+    setShowSolutions(prev => ({ ...prev, [problemId]: !prev[problemId] }));
+  };
+
+  const verifyProblem = async (problemId) => {
+    const selectedIdx = selectedAnswers[problemId];
+    if (selectedIdx === undefined) return;
+    setVerifyingId(problemId);
+    try {
+      const response = await fetch(`${API}/practice/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problem_id: problemId, selected_index: selectedIdx })
+      });
+      const data = await response.json();
+      setVerifications(prev => ({ ...prev, [problemId]: data }));
+    } catch {
+      // handle error
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const filteredProblems = useMemo(() => {
+    return problems.filter(p => {
+      const matchCat = categoryFilter === "all" || p.category.toLowerCase() === categoryFilter.toLowerCase();
+      const matchDiff = difficultyFilter === "all" || p.difficulty.toLowerCase() === difficultyFilter.toLowerCase();
+      return matchCat && matchDiff;
+    });
+  }, [problems, categoryFilter, difficultyFilter]);
+
+  return (
+    <div className="practice-layout">
+      {/* Category & Difficulty Filter Bar */}
+      <div className="practice-filters">
+        <div className="filter-group">
+          <span className="filter-label">DISCIPLINE:</span>
+          <button
+            type="button"
+            className={`filter-btn ${categoryFilter === "all" ? "active" : ""}`}
+            onClick={() => setCategoryFilter("all")}
+          >
+            All Disciplines
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${categoryFilter === "calculus" ? "active" : ""}`}
+            onClick={() => setCategoryFilter("calculus")}
+          >
+            Calculus Lab
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${categoryFilter === "signals" ? "active" : ""}`}
+            onClick={() => setCategoryFilter("signals")}
+          >
+            Signals &amp; Systems
+          </button>
+        </div>
+
+        <div className="filter-group">
+          <span className="filter-label">DIFFICULTY:</span>
+          <button
+            type="button"
+            className={`filter-btn ${difficultyFilter === "all" ? "active" : ""}`}
+            onClick={() => setDifficultyFilter("all")}
+          >
+            All Tiers
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${difficultyFilter === "fundamentals" ? "active" : ""}`}
+            onClick={() => setDifficultyFilter("fundamentals")}
+          >
+            Fundamentals
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${difficultyFilter === "standard" ? "active" : ""}`}
+            onClick={() => setDifficultyFilter("standard")}
+          >
+            Standard
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${difficultyFilter === "challenge" ? "active" : ""}`}
+            onClick={() => setDifficultyFilter("challenge")}
+          >
+            Challenge
+          </button>
+        </div>
+      </div>
+
+      {/* Problem Cards List */}
+      <div className="practice-cards-list">
+        {loading ? (
+          <div className="result-empty">Loading curated mathematical problem sets…</div>
+        ) : filteredProblems.length === 0 ? (
+          <div className="result-empty">No problems found matching active filters.</div>
+        ) : (
+          filteredProblems.map(prob => {
+            const verification = verifications[prob.id];
+            const isCorrect = verification?.is_correct;
+            const hasVerified = verification != null;
+            const isSolutionOpen = showSolutions[prob.id];
+            const isHintOpen = showHints[prob.id];
+            const selectedIdx = selectedAnswers[prob.id];
+
+            return (
+              <div
+                key={prob.id}
+                className={`practice-card ${hasVerified ? (isCorrect ? "is-correct" : "is-incorrect") : ""}`}
+              >
+                {/* Header */}
+                <div className="practice-card-header">
+                  <div className="practice-meta">
+                    <span className="badge-tag">{prob.topic}</span>
+                    <span className={`difficulty-badge ${prob.difficulty.toLowerCase()}`}>
+                      {prob.difficulty}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "12px", color: "var(--text-dim)", textTransform: "uppercase" }}>
+                    {prob.category === "calculus" ? "Calculus Core" : "Signal Theory"}
+                  </span>
+                </div>
+
+                {/* Question */}
+                <div className="practice-question">
+                  <MathFormula tex={prob.question} />
+                </div>
+
+                {/* Multiple Choice Options */}
+                <div className="practice-options">
+                  {prob.options.map((opt, optIdx) => {
+                    const isSelected = selectedIdx === optIdx;
+                    return (
+                      <button
+                        key={optIdx}
+                        type="button"
+                        className={`practice-option-btn ${isSelected ? "selected" : ""}`}
+                        onClick={() => selectOption(prob.id, optIdx)}
+                      >
+                        <span className="option-circle">{String.fromCharCode(65 + optIdx)}</span>
+                        <span><MathFormula tex={opt} /></span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Actions & Verification Bar */}
+                <div className="practice-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    style={{ padding: "8px 18px", height: "auto" }}
+                    onClick={() => verifyProblem(prob.id)}
+                    disabled={selectedIdx === undefined || verifyingId === prob.id}
+                  >
+                    <Check size={14} />
+                    {verifyingId === prob.id ? "Verifying…" : "Verify Answer"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="filter-btn"
+                    onClick={() => toggleHint(prob.id)}
+                  >
+                    <Lightbulb size={13} />
+                    {isHintOpen ? "Hide Hint" : "Need a Hint?"}
+                  </button>
+
+                  {hasVerified && (
+                    <button
+                      type="button"
+                      className="filter-btn"
+                      onClick={() => toggleSolution(prob.id)}
+                      style={{ marginLeft: "auto", borderColor: "rgba(194, 59, 96, 0.4)" }}
+                    >
+                      <BookOpen size={13} />
+                      {isSolutionOpen ? "Collapse Steps" : "View Step-by-Step Solution"}
+                      {isSolutionOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    </button>
+                  )}
+                </div>
+
+                {/* Hint Drawer */}
+                {isHintOpen && (
+                  <div className="hint-box">
+                    <strong>Pedagogical Hint:</strong> <MathFormula tex={prob.hint} />
+                  </div>
+                )}
+
+                {/* Verification Result Banner */}
+                {hasVerified && (
+                  <div
+                    style={{
+                      marginTop: "14px",
+                      padding: "10px 14px",
+                      borderRadius: "var(--radius-sm)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      background: isCorrect ? "rgba(138, 158, 140, 0.15)" : "rgba(194, 59, 96, 0.15)",
+                      color: isCorrect ? "#a8bca9" : "#e07a93",
+                      fontSize: "13px"
+                    }}
+                  >
+                    {isCorrect ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                    <span>
+                      {isCorrect
+                        ? "Correct! Excellent mathematical reasoning."
+                        : "Not quite — review the hint or expand the step-by-step solution below."}
+                    </span>
+                  </div>
+                )}
+
+                {/* Step-by-Step Solution Breakdown */}
+                {isSolutionOpen && verification?.steps && (
+                  <div className="solution-steps">
+                    <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      VERIFIED STEP-BY-STEP DERIVATION:
+                    </span>
+                    {verification.steps.map((st, sIdx) => (
+                      <div key={sIdx} className="step-item">
+                        <div className="step-item-title">Step {sIdx + 1}: {st.title}</div>
+                        <div className="step-item-content">
+                          <MathFormula tex={st.content} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Main Application Component
 // ----------------------------------------------------
 function App() {
   const [activePage, setActivePage] = useState("mvt");
   const [apiStatus, setApiStatus] = useState("checking");
   const [showSteps, setShowSteps] = useState(true);
+  const [domainMode, setDomainMode] = useState("calculus"); // "calculus" | "signals" | "practice"
+  const [signalsTab, setSignalsTab] = useState("explorer"); // "explorer" | "convolution"
 
   // MVT Explorer state
   const [expression, setExpression] = useState("x^2");
@@ -891,54 +2162,105 @@ function App() {
           </div>
           <div>
             <strong>AI MATH LAB</strong>
-            <span>Computational Mathematics &amp; Calculus</span>
+            <span>Computational Mathematics &amp; Signals</span>
           </div>
         </div>
 
-        <nav className="page-nav" aria-label="Math Lab Modules">
+        {/* 3 Main Pillars Segmented Switcher */}
+        <div className="pillar-switcher" role="tablist" aria-label="Main Disciplines">
           <button
             type="button"
-            className={activePage === "mvt" ? "active" : ""}
-            onClick={() => setActivePage("mvt")}
+            className={`pillar-btn ${domainMode === "calculus" ? "active" : ""}`}
+            onClick={() => setDomainMode("calculus")}
           >
-            <Compass size={14} /> MVT Explorer
+            <Compass size={14} />
+            <span>Calculus Lab</span>
           </button>
           <button
             type="button"
-            className={activePage === "calculus" ? "active" : ""}
-            onClick={() => setActivePage("calculus")}
+            className={`pillar-btn ${domainMode === "signals" ? "active" : ""}`}
+            onClick={() => setDomainMode("signals")}
           >
-            <Cpu size={14} /> Calculus Engine
+            <Activity size={14} />
+            <span>Signals &amp; Systems</span>
           </button>
           <button
             type="button"
-            className={activePage === "taylor" ? "active" : ""}
-            onClick={() => setActivePage("taylor")}
+            className={`pillar-btn ${domainMode === "practice" ? "active" : ""}`}
+            onClick={() => setDomainMode("practice")}
           >
-            <Sparkles size={14} /> Taylor Series
+            <BookOpen size={14} />
+            <span>Practice &amp; Solver</span>
           </button>
-          <button
-            type="button"
-            className={activePage === "riemann" ? "active" : ""}
-            onClick={() => setActivePage("riemann")}
-          >
-            <BarChart3 size={14} /> Riemann Sums
-          </button>
-          <button
-            type="button"
-            className={activePage === "critical" ? "active" : ""}
-            onClick={() => setActivePage("critical")}
-          >
-            <TrendingUp size={14} /> Critical Points
-          </button>
-          <button
-            type="button"
-            className={activePage === "limits" ? "active" : ""}
-            onClick={() => setActivePage("limits")}
-          >
-            <InfinityIcon size={14} /> Limits
-          </button>
-        </nav>
+        </div>
+
+        {/* Sub-nav for Calculus Lab */}
+        {domainMode === "calculus" && (
+          <nav className="page-nav" aria-label="Calculus Modules">
+            <button
+              type="button"
+              className={activePage === "mvt" ? "active" : ""}
+              onClick={() => setActivePage("mvt")}
+            >
+              <Compass size={14} /> MVT Explorer
+            </button>
+            <button
+              type="button"
+              className={activePage === "calculus" ? "active" : ""}
+              onClick={() => setActivePage("calculus")}
+            >
+              <Cpu size={14} /> Calculus Engine
+            </button>
+            <button
+              type="button"
+              className={activePage === "taylor" ? "active" : ""}
+              onClick={() => setActivePage("taylor")}
+            >
+              <Sparkles size={14} /> Taylor Series
+            </button>
+            <button
+              type="button"
+              className={activePage === "riemann" ? "active" : ""}
+              onClick={() => setActivePage("riemann")}
+            >
+              <BarChart3 size={14} /> Riemann Sums
+            </button>
+            <button
+              type="button"
+              className={activePage === "critical" ? "active" : ""}
+              onClick={() => setActivePage("critical")}
+            >
+              <TrendingUp size={14} /> Critical Points
+            </button>
+            <button
+              type="button"
+              className={activePage === "limits" ? "active" : ""}
+              onClick={() => setActivePage("limits")}
+            >
+              <InfinityIcon size={14} /> Limits
+            </button>
+          </nav>
+        )}
+
+        {/* Sub-nav for Signals & Systems */}
+        {domainMode === "signals" && (
+          <nav className="page-nav" aria-label="Signals Modules">
+            <button
+              type="button"
+              className={signalsTab === "explorer" ? "active" : ""}
+              onClick={() => setSignalsTab("explorer")}
+            >
+              <Activity size={14} /> Signal Explorer &amp; Transformations
+            </button>
+            <button
+              type="button"
+              className={signalsTab === "convolution" ? "active" : ""}
+              onClick={() => setSignalsTab("convolution")}
+            >
+              <RotateCcw size={14} /> Convolution Visualizer
+            </button>
+          </nav>
+        )}
 
         <div className="status">
           <i className={apiStatus === "online" ? "online" : "pulse"} />
@@ -946,6 +2268,8 @@ function App() {
         </div>
       </header>
 
+      {domainMode === "calculus" && (
+        <>
       {/* Hero Section with KaTeX Header Formula */}
       <section className="title-row">
         <div>
@@ -1777,6 +3101,67 @@ function App() {
             </div>
           </div>
         </section>
+        </>
+      )}
+
+      {/* ======================================================== */}
+      {/* SIGNALS & SYSTEMS LAB                                    */}
+      {/* ======================================================== */}
+      {domainMode === "signals" && (
+        <>
+          <section className="title-row">
+            <div>
+              <span className="section-code">
+                {signalsTab === "explorer" && "PILLAR 02 · MODULE 07 · WAVEFORMS"}
+                {signalsTab === "convolution" && "PILLAR 02 · MODULE 08 · DYNAMICS"}
+              </span>
+              <h1>
+                {signalsTab === "explorer" && "Signal Explorer & Continuous/Discrete Transformations"}
+                {signalsTab === "convolution" && "Convolution Visualizer (Continuous & Discrete)"}
+              </h1>
+              <p>
+                {signalsTab === "explorer" &&
+                  "Explore standard continuous-time t and discrete-time n stem waveforms, energy metrics, and fundamental transformations y(t) = A·x(a(t - t₀))."}
+                {signalsTab === "convolution" &&
+                  "Step-by-step interactive folding, sliding kernel, overlap product area, and accumulated output for continuous integrals and discrete sums."}
+              </p>
+            </div>
+            <div className="formula">
+              {signalsTab === "explorer" && (
+                <MathFormula tex="y(t) = A \cdot x(a(t - t_0)) \quad \text{or} \quad y[n] = A \cdot x[a(n - n_0)]" />
+              )}
+              {signalsTab === "convolution" && (
+                <MathFormula tex="y(t) = \int_{-\infty}^{\infty} x(\tau) h(t - \tau) d\tau \quad \iff \quad y[n] = \sum_k x[k] h[n - k]" />
+              )}
+            </div>
+          </section>
+
+          {signalsTab === "explorer" && <SignalExplorer />}
+          {signalsTab === "convolution" && <ConvolutionVisualizer />}
+        </>
+      )}
+
+      {/* ======================================================== */}
+      {/* PRACTICE MODE & STEP-BY-STEP SOLVER                      */}
+      {/* ======================================================== */}
+      {domainMode === "practice" && (
+        <>
+          <section className="title-row">
+            <div>
+              <span className="section-code">PILLAR 03 · STEP-BY-STEP SOLVER</span>
+              <h1>Curated Mathematical Problem Bank &amp; Step-by-Step Solver</h1>
+              <p>
+                Challenge yourself across Calculus and Signals &amp; Systems with tiered difficulty (Fundamentals, Standard, Challenge).
+                Includes hints, instant verification, and detailed KaTeX worked solutions.
+              </p>
+            </div>
+            <div className="formula">
+              <MathFormula tex="\text{Select Answer} \implies \text{Instant Verify} \implies \text{KaTeX Step-by-Step Proof}" />
+            </div>
+          </section>
+
+          <PracticeSolver />
+        </>
       )}
 
       {/* Footer */}
