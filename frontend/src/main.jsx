@@ -4233,18 +4233,36 @@ function App() {
   const [criticalResult, setCriticalResult] = useState(null);
   const [criticalLoading, setCriticalLoading] = useState(false);
 
-  // Check backend health on mount
+  // Check backend health on mount with automatic retry polling
   useEffect(() => {
+    let timer;
+    let isMounted = true;
+
     async function checkHealth() {
       try {
-        const res = await fetch(`${API}/health`, { method: "GET" });
-        if (res.ok) setApiStatus("online");
-        else setApiStatus("error");
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(`${API}/health`, { method: "GET", signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          if (isMounted) setApiStatus("online");
+          return;
+        } else {
+          if (isMounted) setApiStatus("error");
+        }
       } catch {
-        setApiStatus("sleeping");
+        if (isMounted) setApiStatus("sleeping");
+      }
+      if (isMounted) {
+        timer = setTimeout(checkHealth, 4000);
       }
     }
+
     checkHealth();
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const insertToken = val => {
@@ -4261,15 +4279,20 @@ function App() {
     if (!expression.trim() || isNaN(Number(a)) || isNaN(Number(b)) || Number(a) >= Number(b)) return;
     setLoading(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
       const r = await fetch(`${API}/mvt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expression, a: Number(a), b: Number(b) })
+        body: JSON.stringify({ expression, a: Number(a), b: Number(b) }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await r.json();
       setResult(data);
+      if (data && !data.error) setApiStatus("online");
     } catch {
-      setResult({ error: "Could not connect to backend. The instance might be starting up." });
+      setResult({ error: "Could not connect to backend. The free-tier cloud instance might be waking up (~30-45s). Please wait a moment and click Recalculate." });
     } finally {
       setLoading(false);
     }
@@ -4474,6 +4497,11 @@ function App() {
             <InteractiveHome onNavigate={navigateTo} apiStatus={apiStatus} />
           )}
 
+          {/* AI Intelligence Copilot & Personalized Math Analyzer */}
+          {domainMode === "copilot" && (
+            <AICopilotView onNavigate={navigateTo} />
+          )}
+
       {domainMode === "calculus" && (
         <>
       {/* Hero Section with KaTeX Header Formula */}
@@ -4656,7 +4684,7 @@ function App() {
                   <div className="detected">
                     <span>DETECTED ROOTS · CLICK TO PIN</span>
                     <div className="coordinate-list">
-                      {result.mvt_points.map((cVal, i) => {
+                      {(result.mvt_points || []).map((cVal, i) => {
                         const pts = result.plot_points || [];
                         const p = pts.reduce(
                           (best, pt) => (Math.abs(pt.x - cVal) < Math.abs(best.x - cVal) ? pt : best),
@@ -4809,7 +4837,7 @@ function App() {
 
                       {showSteps && (
                         <div className="steps-list">
-                          {calculusResult.steps.map((st, idx) => (
+                          {(calculusResult.steps || []).map((st, idx) => (
                             <div key={idx} className="step-card">
                               <div className="step-number">{idx + 1}</div>
                               <div className="step-content">
@@ -5143,7 +5171,7 @@ function App() {
                     <div className="detected">
                       <span>INFLECTION POINTS [f″(x) = 0]</span>
                       <div className="coordinate-list">
-                        {criticalResult.inflection_points.map((inf, i) => (
+                        {(criticalResult.inflection_points || []).map((inf, i) => (
                           <div key={i} className="term-chip">
                             <b>Inflection Point:</b>
                             <span>({inf.x}, {inf.y})</span>
