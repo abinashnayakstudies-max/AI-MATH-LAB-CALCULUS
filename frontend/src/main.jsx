@@ -37,7 +37,11 @@ import {
   LayoutDashboard,
   SlidersHorizontal,
   ExternalLink,
-  Waves
+  Waves,
+  Bot,
+  MessageSquare,
+  Send,
+  User
 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -2832,7 +2836,7 @@ function InteractiveQuickSandbox({ onLaunchModule }) {
       const res = await fetch(`${API}/calculus`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expression: fn, order: 1, int_type: "indefinite" })
+        body: JSON.stringify({ expression: fn, operation: "differentiate", order: 1 })
       });
       if (!res.ok) throw new Error("Backend analytical computation failed");
       const data = await res.json();
@@ -3413,6 +3417,25 @@ function AppSidebar({
             })}
           </div>
 
+          {/* Section: AI Copilot */}
+          <div className="sidebar-section">
+            {!collapsed && <div className="sidebar-section-title">INTELLIGENCE</div>}
+            <button
+              type="button"
+              className={`sidebar-nav-item ${domainMode === "copilot" ? "active" : ""}`}
+              onClick={() => onNavigate("copilot")}
+              title="AI Math Copilot & Analyzer"
+            >
+              <Bot size={16} />
+              {!collapsed && (
+                <>
+                  <span className="item-label">AI Math Copilot</span>
+                  <span className="item-badge-pill" style={{ background: "rgba(80, 227, 194, 0.18)", borderColor: "rgba(80, 227, 194, 0.45)", color: "#50e3c2" }}>AI</span>
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Section: Practice & Solver */}
           <div className="sidebar-section">
             {!collapsed && <div className="sidebar-section-title">PRACTICE ARENA</div>}
@@ -3473,6 +3496,9 @@ function AppNavbar({
     if (domainMode === "home") {
       return { pillar: "Dashboard", module: "Interactive Overview" };
     }
+    if (domainMode === "copilot") {
+      return { pillar: "AI Intelligence", module: "Personalized Math Analyzer & Copilot" };
+    }
     if (domainMode === "practice") {
       return { pillar: "Practice Arena", module: "Problem Bank & Step-by-Step Solver" };
     }
@@ -3528,6 +3554,15 @@ function AppNavbar({
         <button
           type="button"
           className="navbar-quick-btn"
+          onClick={() => onNavigate("copilot")}
+          title="Open AI Math Copilot"
+        >
+          <Bot size={14} />
+          <span>AI Copilot</span>
+        </button>
+        <button
+          type="button"
+          className="navbar-quick-btn"
           onClick={() => onNavigate("home")}
           title="Return to Overview"
         >
@@ -3555,6 +3590,412 @@ function AppNavbar({
 }
 
 
+
+// ----------------------------------------------------
+// PERSONALIZED AI MATH ANALYZER & COPILOT COMPONENT
+// ----------------------------------------------------
+
+function AICopilotView({ onNavigate, initialFormula }) {
+  const [persona, setPersona] = useState("ada");
+  const [level, setLevel] = useState("undergraduate");
+  const [inputMsg, setInputMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const personas = [
+    {
+      id: "ada",
+      name: "Ada Lovelace",
+      role: "Intuitive & Visual Tutor",
+      desc: "Metaphors, visual curves, step-by-step encouragement.",
+      icon: "💡"
+    },
+    {
+      id: "gauss",
+      name: "Carl Friedrich Gauss",
+      role: "Formal Analytical Rigor",
+      desc: "Delta-epsilon proofs, formal theorems, strict deduction.",
+      icon: "🎓"
+    },
+    {
+      id: "fourier",
+      name: "Joseph Fourier",
+      role: "Signals & Transforms Physicist",
+      desc: "Frequency response, harmonic synthesis, LTI theorems.",
+      icon: "⚡"
+    },
+    {
+      id: "concise",
+      name: "Quick Solver",
+      role: "Direct Closed-Form Engine",
+      desc: "Instant formulas, bulleted derivation steps, zero fluff.",
+      icon: "🚀"
+    }
+  ];
+
+  const levels = [
+    { id: "foundational", label: "Foundational (AP / High School)" },
+    { id: "undergraduate", label: "Undergraduate (STEM)" },
+    { id: "advanced", label: "Advanced (Graduate / Pure Math)" }
+  ];
+
+  const starterPrompts = [
+    "Differentiate sin(x)/x with quotient rule",
+    "Explain why the Mean Value Theorem guarantees a parallel tangent",
+    "Prove whether y(t) = t * x(t) is an LTI system",
+    "Why does Gibbs phenomenon occur in Fourier square waves?",
+    "Find critical points and inflection of x^3 - 3*x"
+  ];
+
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      sender: "ai",
+      text: "Greetings! I am your personalized **AI Math Copilot**, connected to the exact SymPy computational engine and 10 interactive mathematics laboratories.\n\nSelect a persona above, or ask me any question about derivatives, integrals, limits, critical points, LTI stability, or Fourier harmonics!",
+      actions: [
+        { label: "Launch 3D MVT Lab", domain: "calculus", page: "mvt" },
+        { label: "Fourier Analysis Lab", domain: "signals", sub: "fourier" },
+        { label: "Curated Problem Solver", domain: "practice" }
+      ],
+      suggested_prompts: starterPrompts.slice(0, 3)
+    }
+  ]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
+
+  const handleSend = async (queryText = inputMsg) => {
+    const text = (queryText || inputMsg).trim();
+    if (!text || loading) return;
+
+    const userMsg = { id: Date.now(), sender: "user", text };
+    setMessages(prev => [...prev, userMsg]);
+    setInputMsg("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API}/ai/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          persona,
+          level,
+          active_formula: initialFormula || null
+        })
+      });
+
+      if (!res.ok) throw new Error("AI analysis service temporarily unreachable");
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      const aiMsg = {
+        id: Date.now() + 1,
+        sender: "ai",
+        text: data.reply,
+        steps: data.steps || [],
+        actions: data.actions || [],
+        suggested_prompts: data.suggested_prompts || []
+      };
+      setMessages(prev => [...prev, aiMsg]);
+    } catch (err) {
+      // Offline fallback pedagogical response
+      const fallbackMsg = {
+        id: Date.now() + 1,
+        sender: "ai",
+        text: `**Notice:** AI service connecting to local analyzer. For query "${text}", you can explore direct closed-form computations in **Module 02 (Symbolic Engine)** or test mathematical proofs in **Module 09 (LTI System Analyzer)**.`,
+        actions: [
+          { label: "Open Symbolic Calculus Engine", domain: "calculus", page: "calculus" },
+          { label: "Open 3D MVT Explorer", domain: "calculus", page: "mvt" }
+        ],
+        suggested_prompts: starterPrompts.slice(0, 3)
+      };
+      setMessages(prev => [...prev, fallbackMsg]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="copilot-container">
+      {/* Header & Personalization Bar */}
+      <div className="copilot-header panel">
+        <div className="copilot-title-row">
+          <div className="copilot-title">
+            <div className="copilot-avatar">
+              <Bot size={22} />
+            </div>
+            <div>
+              <h2>AI Math Copilot &amp; Analytical Advisor</h2>
+              <p>Personalized artificial intelligence grounded in exact SymPy symbolic computation.</p>
+            </div>
+          </div>
+
+          <div className="copilot-level-select">
+            <span className="level-label">Level:</span>
+            <select
+              value={level}
+              onChange={(e) => setLevel(e.target.value)}
+              className="level-dropdown"
+            >
+              {levels.map(l => (
+                <option key={l.id} value={l.id}>{l.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Persona Selector Tabs */}
+        <div className="copilot-persona-grid">
+          {personas.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              className={`persona-card ${persona === p.id ? "active" : ""}`}
+              onClick={() => setPersona(p.id)}
+            >
+              <span className="persona-icon">{p.icon}</span>
+              <div className="persona-info">
+                <strong>{p.name}</strong>
+                <span className="persona-role">{p.role}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat Messages Log */}
+      <div className="copilot-chat-log panel">
+        {messages.map((m) => (
+          <div key={m.id} className={`chat-bubble-row ${m.sender}`}>
+            <div className="chat-avatar">
+              {m.sender === "ai" ? <Bot size={16} /> : <User size={16} />}
+            </div>
+
+            <div className="chat-bubble-content">
+              <div className="chat-text">
+                <MathFormula tex={m.text} />
+              </div>
+
+              {/* Step Breakdown Cards */}
+              {m.steps && m.steps.length > 0 && (
+                <div className="chat-steps-container">
+                  {m.steps.map((st, sIdx) => (
+                    <div key={sIdx} className="chat-step-card">
+                      <div className="step-title">{st.title}</div>
+                      <div className="step-formula">
+                        <MathFormula tex={st.latex} block={true} />
+                      </div>
+                      {st.notes && <div className="step-notes">{st.notes}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Action Bridge Links */}
+              {m.actions && m.actions.length > 0 && (
+                <div className="chat-actions-row">
+                  {m.actions.map((act, aIdx) => (
+                    <button
+                      key={aIdx}
+                      type="button"
+                      className="chat-action-btn"
+                      onClick={() => onNavigate(act.domain, act.page || act.sub, act.formula)}
+                    >
+                      <Sparkles size={13} />
+                      <span>{act.label}</span>
+                      <ArrowRight size={12} />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Follow-up Prompts */}
+              {m.suggested_prompts && m.suggested_prompts.length > 0 && (
+                <div className="chat-suggestions">
+                  <span className="suggestions-label">Explore next:</span>
+                  <div className="suggestions-list">
+                    {m.suggested_prompts.map((prm, pIdx) => (
+                      <button
+                        key={pIdx}
+                        type="button"
+                        className="suggestion-chip"
+                        onClick={() => handleSend(prm)}
+                      >
+                        {prm}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div className="chat-bubble-row ai loading">
+            <div className="chat-avatar"><Bot size={16} /></div>
+            <div className="chat-loading-dots">
+              <span /><span /><span />
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Bar */}
+      <div className="copilot-input-bar panel">
+        <input
+          className="copilot-text-input"
+          value={inputMsg}
+          onChange={(e) => setInputMsg(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
+          placeholder="Ask a question, request a proof, or type a formula (e.g. sin(x)/x)..."
+          disabled={loading}
+        />
+        <button
+          className="copilot-send-btn"
+          onClick={() => handleSend()}
+          disabled={loading || !inputMsg.trim()}
+        >
+          <Send size={15} />
+          <span>Send</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FloatingAICopilot({ onNavigate }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [quickInput, setQuickInput] = useState("");
+  const [quickMessages, setQuickMessages] = useState([
+    { sender: "ai", text: "Hi! Need a quick formula check, derivative, or proof? Ask below or open full workspace!" }
+  ]);
+  const [loading, setLoading] = useState(false);
+
+  const handleQuickSend = async () => {
+    const text = quickInput.trim();
+    if (!text || loading) return;
+    setQuickMessages(prev => [...prev, { sender: "user", text }]);
+    setQuickInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API}/ai/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, persona: "ada", level: "undergraduate" })
+      });
+      const data = await res.json();
+      setQuickMessages(prev => [...prev, {
+        sender: "ai",
+        text: data.reply || "Computation completed.",
+        actions: data.actions || []
+      }]);
+    } catch (e) {
+      setQuickMessages(prev => [...prev, {
+        sender: "ai",
+        text: `Analysis ready in **AI Copilot** workspace.`
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="floating-copilot-container">
+      {isOpen && (
+        <div className="floating-copilot-card panel">
+          <div className="floating-card-header">
+            <div className="card-brand">
+              <Bot size={16} />
+              <strong>AI Math Copilot</strong>
+            </div>
+            <div className="card-actions">
+              <button
+                type="button"
+                className="card-action-icon"
+                onClick={() => { setIsOpen(false); onNavigate("copilot"); }}
+                title="Open Full Workspace"
+              >
+                <Maximize2 size={14} />
+              </button>
+              <button
+                type="button"
+                className="card-action-icon"
+                onClick={() => setIsOpen(false)}
+                title="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="floating-card-body">
+            {quickMessages.map((m, i) => (
+              <div key={i} className={`floating-msg ${m.sender}`}>
+                <MathFormula tex={m.text} />
+                {m.actions && (
+                  <div className="floating-actions">
+                    {m.actions.map((act, aIdx) => (
+                      <button
+                        key={aIdx}
+                        type="button"
+                        className="floating-act-btn"
+                        onClick={() => { setIsOpen(false); onNavigate(act.domain, act.page || act.sub); }}
+                      >
+                        {act.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {loading && <div className="floating-msg ai">Analyzing...</div>}
+          </div>
+
+          <div className="floating-card-footer">
+            <input
+              value={quickInput}
+              onChange={(e) => setQuickInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleQuickSend(); }}
+              placeholder="Ask formula question..."
+              className="floating-input"
+            />
+            <button
+              onClick={handleQuickSend}
+              className="floating-send-btn"
+              disabled={loading || !quickInput.trim()}
+            >
+              <Send size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        className={`floating-copilot-btn ${isOpen ? "open" : ""}`}
+        onClick={() => setIsOpen(!isOpen)}
+        title="Open AI Math Assistant"
+      >
+        <Bot size={20} />
+        <span className="floating-btn-text">AI Copilot</span>
+        <span className="floating-dot" />
+      </button>
+    </div>
+  );
+}
+
+
 function parseHash() {
   if (typeof window === "undefined") return { domain: "home" };
   const hash = window.location.hash.replace(/^#\/?/, "").toLowerCase();
@@ -3563,6 +4004,7 @@ function parseHash() {
   if (hash.startsWith("signals/lti")) return { domain: "signals", signalsTab: "lti" };
   if (hash.startsWith("signals/fourier")) return { domain: "signals", signalsTab: "fourier" };
   if (hash.startsWith("signals")) return { domain: "signals", signalsTab: "explorer" };
+  if (hash.startsWith("copilot") || hash.startsWith("chat") || hash.startsWith("ai")) return { domain: "copilot" };
   if (hash.startsWith("practice") || hash.startsWith("solver")) return { domain: "practice" };
   if (hash.startsWith("about")) return { domain: "about" };
   if (hash.startsWith("mvt")) return { domain: "calculus", page: "mvt" };
@@ -3597,6 +4039,7 @@ function App() {
     let target = "";
     if (domainMode === "home") target = `#/home`;
     else if (domainMode === "signals") target = `#/signals/${signalsTab}`;
+    else if (domainMode === "copilot") target = `#/copilot`;
     else if (domainMode === "practice") target = `#/practice`;
     else if (domainMode === "about") target = `#/about`;
     else target = `#/${activePage}`;
@@ -4813,6 +5256,9 @@ function App() {
       )}
 
         </div>
+
+        {/* Floating Quick Assistant */}
+        <FloatingAICopilot onNavigate={navigateTo} />
 
         {/* Global Minimal Footer */}
         <footer className="app-footer">

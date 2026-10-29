@@ -331,7 +331,7 @@ def calculate_mvt(req: MVTRequest):
 
 class CalculusRequest(BaseModel):
     expression: str = Field(..., min_length=1, max_length=200)
-    operation: str
+    operation: str = Field(default="differentiate")
     a: float | None = None
     b: float | None = None
     order: int = Field(default=1, ge=1, le=5)
@@ -443,6 +443,12 @@ def calculate_calculus(req: CalculusRequest):
                 "latex": f"= {sp.latex(result)}"
             })
 
+        try:
+            antideriv_expr = sp.integrate(expr, x)
+            antideriv_latex = sp.latex(antideriv_expr)
+        except Exception:
+            antideriv_latex = r"\text{Non-elementary}"
+
         return {
             "success": True,
             "operation": operation_name,
@@ -450,7 +456,10 @@ def calculate_calculus(req: CalculusRequest):
             "result": str(result),
             "latex": sp.latex(result),
             "original_latex": sp.latex(expr),
-            "derivative": str(derivative),
+            "derivative": sp.latex(derivative),
+            "integral": antideriv_latex,
+            "integral_latex": antideriv_latex,
+            "derivative_str": str(derivative),
             "variable": "x",
             "plot_points": original_points,
             "derivative_plot_points": derivative_points,
@@ -1475,3 +1484,282 @@ def calculate_fourier_series(req: FourierSeriesRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+# ==========================================
+
+# ==========================================
+# 12. PERSONALIZED AI MATH ANALYZER CHATBOT
+# ==========================================
+
+class AIAnalyzeRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+    persona: str = Field(default="ada")
+    level: str = Field(default="undergraduate")
+    active_formula: str | None = None
+    active_module: str | None = None
+
+
+@app.post("/ai/analyze")
+def ai_analyze_math(req: AIAnalyzeRequest):
+    try:
+        msg = req.message.strip()
+        persona = req.persona.lower()
+        level = req.level.lower()
+
+        extracted_formula = None
+        for q in ["'", '"', '`']:
+            if q in msg:
+                parts = msg.split(q)
+                if len(parts) >= 3:
+                    extracted_formula = parts[1].strip()
+                    break
+
+        if not extracted_formula:
+            match_math = re.search(r"(?:of|for|function|f\(x\)\s*=|y\(t\)\s*=)\s*([a-zA-Z0-9\^_\+\-\*/\(\)\s\.\,]+)", msg, re.IGNORECASE)
+            if match_math:
+                extracted_formula = match_math.group(1).strip()
+            elif req.active_formula:
+                extracted_formula = req.active_formula
+
+        if extracted_formula:
+            extracted_formula = re.sub(r"[,\.\?!;]+$", "", extracted_formula).strip()
+
+        sym_expr = None
+        sym_derivative = None
+        sym_integral = None
+        sym_limit_0 = None
+
+        if extracted_formula:
+            try:
+                sym_expr = parse_math_expression(extracted_formula)
+                sym_derivative = sp.diff(sym_expr, x)
+                try:
+                    sym_integral = sp.integrate(sym_expr, x)
+                except Exception:
+                    sym_integral = None
+                try:
+                    sym_limit_0 = sp.limit(sym_expr, x, 0)
+                except Exception:
+                    sym_limit_0 = None
+            except Exception:
+                pass
+
+        lower_msg = msg.lower()
+        is_derivative = any(k in lower_msg for k in ["derivative", "differentiate", "slope", "tangent", "rate of change", "f'(x)"])
+        is_integral = any(k in lower_msg for k in ["integral", "integrate", "antiderivative", "area under", "riemann"])
+        is_limit = any(k in lower_msg for k in ["limit", "continuity", "asymptote", "l'hopital", "lhopital"])
+        is_mvt = any(k in lower_msg for k in ["mean value theorem", "mvt", "secant", "rolle"])
+        is_convolution = any(k in lower_msg for k in ["convolution", "convolve", "impulse response", "flip and slide"])
+        is_lti = any(k in lower_msg for k in ["lti", "linear", "time-invariant", "causality", "bibo", "stability"])
+        is_fourier = any(k in lower_msg for k in ["fourier", "harmonic", "square wave", "sawtooth", "gibbs", "frequency"])
+
+        steps = []
+        actions = []
+        suggested_prompts = []
+
+        if persona == "gauss":
+            persona_name = "Carl Friedrich Gauss"
+            tone_greeting = "By rigorous mathematical deduction, let us formalize the analytical structure."
+        elif persona == "fourier":
+            persona_name = "Joseph Fourier"
+            tone_greeting = "Let us decompose this problem across its fundamental harmonic spectrum."
+        elif persona == "concise":
+            persona_name = "Quick Solver Copilot"
+            tone_greeting = "Here is the exact analytical solution and core formulas:"
+        else:
+            persona_name = "Ada Lovelace"
+            tone_greeting = "Let's explore the geometric intuition and analytical beauty behind this question!"
+
+        if is_derivative and sym_expr is not None:
+            f_latex = sp.latex(sym_expr)
+            d_latex = sp.latex(sym_derivative)
+            steps.append({
+                "title": "Define Primitive Function",
+                "latex": "f(x) = " + f_latex,
+                "notes": "Original analytical function in domain of interest."
+            })
+            steps.append({
+                "title": "Evaluate First Derivative",
+                "latex": r"f'(x) = \frac{d}{dx}\left[" + f_latex + r"\right] = " + d_latex,
+                "notes": "Instantaneous rate of change and tangent line slope gradient."
+            })
+            if persona == "gauss":
+                reply = (
+                    f"**{persona_name}:** {tone_greeting}\n\n"
+                    f"For the function $f(x) = {f_latex}$, the first derivative is computed via exact calculus rules as:\n\n"
+                    f"$$f'(x) = {d_latex}$$\n\n"
+                    r"Geometrically, this represents the derivative map $f': \mathbb{R} \to \mathbb{R}$, defining the slope of the affine tangent space at every coordinate $x$ where $f$ is differentiable."
+                )
+            elif persona == "fourier":
+                reply = (
+                    f"**{persona_name}:** {tone_greeting}\n\n"
+                    f"Differentiating in time corresponds to frequency scaling $j\\omega$. For your input signal $x(t) = {f_latex}$, the instantaneous differential is:\n\n"
+                    f"$$x'(t) = {d_latex}$$\n\n"
+                    "Notice how high-frequency oscillations receive amplified weighting under differentiation."
+                )
+            elif persona == "concise":
+                reply = f"**Derivative:**\n- Function: $f(x) = {f_latex}$\n- Derivative: $f'(x) = {d_latex}$"
+            else:
+                reply = (
+                    f"**{persona_name}:** {tone_greeting}\n\n"
+                    f"When we look at $f(x) = {f_latex}$, taking the derivative tells us how steep the curve is at each point. Applying differentiation rules yields:\n\n"
+                    f"$$f'(x) = {d_latex}$$\n\n"
+                    r"Where $f'(x) = 0$, the curve momentarily flattens—these are our stationary critical points!"
+                )
+
+            actions.append({"label": "Open in 3D MVT Explorer", "domain": "calculus", "page": "mvt", "formula": str(sym_expr)})
+            actions.append({"label": "Compute Higher-Order Derivatives", "domain": "calculus", "page": "calculus", "formula": str(sym_expr)})
+            suggested_prompts = [
+                f"Find the stationary points where f'(x) = 0 for {extracted_formula}",
+                f"What is the second derivative f''(x) for {extracted_formula}?",
+                f"Compute the indefinite integral of {extracted_formula}"
+            ]
+
+        elif is_integral and sym_expr is not None:
+            f_latex = sp.latex(sym_expr)
+            i_latex = sp.latex(sym_integral) if sym_integral is not None else r"\text{Non-elementary}"
+            steps.append({
+                "title": "Set Up Indefinite Integral",
+                "latex": r"\int \left( " + f_latex + r" \right) dx",
+                "notes": "Anti-differentiation to determine the continuous primitive family."
+            })
+            steps.append({
+                "title": "Exact Closed-Form Antiderivative",
+                "latex": "= " + i_latex + " + C",
+                "notes": "Where C represents the arbitrary integration constant."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                f"The closed-form antiderivative of $f(x) = {f_latex}$ evaluated by the analytical engine is:\n\n"
+                f"$$\\int {f_latex}\\,dx = {i_latex} + C$$\n\n"
+                "By the Fundamental Theorem of Calculus, any definite integral over $[a, b]$ is simply $F(b) - F(a)$."
+            )
+            actions.append({"label": "Simulate Riemann Sum Partitions", "domain": "calculus", "page": "riemann", "formula": str(sym_expr)})
+            actions.append({"label": "Evaluate Definite Bounds in Engine", "domain": "calculus", "page": "calculus", "formula": str(sym_expr)})
+            suggested_prompts = [
+                f"Approximate the definite integral of {extracted_formula} with Riemann sums",
+                f"Does the integral of {extracted_formula} converge over [0, oo)?",
+                f"Show the Taylor polynomial series for {extracted_formula}"
+            ]
+
+        elif is_mvt:
+            mvt_formula = str(sym_expr) if sym_expr else "x^3 - x"
+            steps.append({
+                "title": "Mean Value Theorem Statement",
+                "latex": r"f'(c) = \frac{f(b) - f(a)}{b - a}, \quad c \in (a, b)",
+                "notes": "Requires f to be continuous on [a, b] and differentiable on (a, b)."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"The **Mean Value Theorem (MVT)** guarantees that for any function continuous on $[a, b]$ and differentiable on $(a, b)$, there exists at least one interior coordinate $c \in (a, b)$ where the instantaneous slope equals the average secant slope:"
+                "\n\n"
+                r"$$f'(c) = \frac{f(b) - f(a)}{b - a}$$"
+                "\n\n"
+                "In our **3D MVT Explorer**, you can observe the tangent plane rolling along the 3D surface, perfectly parallel to the secant vector!"
+            )
+            actions.append({"label": "Launch 3D MVT Visualizer", "domain": "calculus", "page": "mvt", "formula": mvt_formula})
+            suggested_prompts = [
+                "How does Rolle's Theorem lead directly to MVT?",
+                "Can MVT fail if the function has a sharp corner like |x|?",
+                "How does the numerical Brent solver guarantee the exact root c?"
+            ]
+
+        elif is_lti:
+            steps.append({
+                "title": "Linearity Criterion",
+                "latex": r"\mathcal{T}\{a x_1(t) + b x_2(t)\} = a \mathcal{T}\{x_1(t)\} + b \mathcal{T}\{x_2(t)\}",
+                "notes": "Satisfies both superposition and homogeneity."
+            })
+            steps.append({
+                "title": "Time-Invariance Criterion",
+                "latex": r"x(t - t_0) \implies y(t - t_0)",
+                "notes": "System behavior is invariant under time translations."
+            })
+            steps.append({
+                "title": "BIBO Stability",
+                "latex": r"\int_{-\infty}^{\infty} |h(t)|\,dt < \infty",
+                "notes": "Bounded input guarantees bounded output if impulse response is absolutely integrable."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"A system $\mathcal{T}$ is **Linear and Time-Invariant (LTI)** if and only if it satisfies both Superposition and Time-Shift Invariance. Any LTI system is completely characterized by its **impulse response** $h(t)$, where the output is given exclusively by the convolution:"
+                "\n\n"
+                r"$$y(t) = (x * h)(t) = \int_{-\infty}^{\infty} x(\tau) h(t - \tau)\,d\tau$$"
+                "\n\n"
+                "You can verify complete formal proofs for systems in the **LTI System Analyzer**!"
+            )
+            actions.append({"label": "Open LTI System Analyzer", "domain": "signals", "sub": "lti"})
+            actions.append({"label": "Explore 4-Track Convolution", "domain": "signals", "sub": "convolution"})
+            suggested_prompts = [
+                "Prove why y(t) = t * x(t) is linear but NOT time-invariant",
+                "Explain why causal systems have h(t) = 0 for t < 0",
+                "How to calculate step response s(t) from impulse response h(t)"
+            ]
+
+        elif is_fourier:
+            steps.append({
+                "title": "Fourier Series Synthesis",
+                "latex": r"x(t) = a_0 + \sum_{n=1}^N \left[ a_n \cos(n\omega_0 t) + b_n \sin(n\omega_0 t) \right]",
+                "notes": "Decomposition of periodic waveforms into orthogonal harmonic bases."
+            })
+            steps.append({
+                "title": "Gibbs Phenomenon",
+                "latex": r"\text{Overshoot} \approx 8.95\% \quad \text{at jump discontinuities}",
+                "notes": "Truncated harmonic synthesis produces localized overshoot near jump boundaries."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"Fourier analysis proves that any well-behaved periodic signal can be synthesized through an infinite sum of orthogonal sines and cosines:"
+                "\n\n"
+                r"$$x(t) = a_0 + \sum_{n=1}^\infty [a_n \cos(n\omega_0 t) + b_n \sin(n\omega_0 t)]$$"
+                "\n\n"
+                r"At jump boundaries (such as square waves), Gibbs phenomenon produces an asymptotic $\sim 8.95\%$ overshoot regardless of harmonic count $N$."
+            )
+            actions.append({"label": "Launch Fourier Analysis Lab", "domain": "signals", "sub": "fourier"})
+            suggested_prompts = [
+                "Show Fourier coefficients an and bn for a 50% square wave",
+                "Why do even-symmetric functions have bn = 0?",
+                "Synthesize a triangle wave with 7 harmonics"
+            ]
+
+        else:
+            if sym_expr is not None:
+                f_latex = sp.latex(sym_expr)
+                d_latex = sp.latex(sym_derivative)
+                i_latex = sp.latex(sym_integral) if sym_integral is not None else r"\text{Non-elementary}"
+                reply = (
+                    f"**{persona_name}:** {tone_greeting}\n\n"
+                    f"I analyzed the function $f(x) = {f_latex}$:\n\n"
+                    f"- **First Derivative:** $f'(x) = {d_latex}$\n"
+                    f"- **Indefinite Integral:** $\\int f(x)\\,dx = {i_latex} + C$\n"
+                )
+                if sym_limit_0 is not None:
+                    reply += f"- **Limit as $x \\to 0$:** $\\lim_{{x \\to 0}} f(x) = {sp.latex(sym_limit_0)}$\n"
+                actions.append({"label": "Open in Symbolic Engine", "domain": "calculus", "page": "calculus", "formula": str(sym_expr)})
+                actions.append({"label": "Inspect 3D MVT Dynamics", "domain": "calculus", "page": "mvt", "formula": str(sym_expr)})
+            else:
+                reply = (
+                    f"**{persona_name}:** {tone_greeting}\n\n"
+                    "I am your personalized AI Math Copilot, connected to the exact SymPy computational engine and 10 interactive physics & math laboratories.\n\n"
+                    "You can ask me to calculate derivatives, integrals, limits, critical points, LTI stability proofs, or Fourier harmonics, or ask for conceptual explanations with step-by-step KaTeX proofs!"
+                )
+                suggested_prompts = [
+                    "Differentiate sin(x)/x with quotient rule",
+                    "Explain the Mean Value Theorem with a 3D example",
+                    "Find critical points of x^3 - 3*x",
+                    "Prove if y(t) = x(2t) is an LTI system"
+                ]
+
+        return {
+            "success": True,
+            "reply": reply,
+            "persona": persona,
+            "persona_name": persona_name,
+            "level": level,
+            "detected_formula": str(sym_expr) if sym_expr is not None else None,
+            "steps": steps,
+            "actions": actions,
+            "suggested_prompts": suggested_prompts
+        }
+    except Exception as e:
+        return {"error": f"AI Analyzer error: {str(e)}"}
