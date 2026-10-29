@@ -2584,7 +2584,6 @@ function parseHash() {
 }
 
 function App() {
-  const [activePage, setActivePage] = useState("mvt");
   const [apiStatus, setApiStatus] = useState("checking");
   const initialRoute = parseHash();
   const [domainMode, setDomainMode] = useState(initialRoute.domain || "calculus");
@@ -3846,6 +3845,7 @@ function App() {
             </div>
           </div>
         </section>
+      )}
         </>
       )}
 
