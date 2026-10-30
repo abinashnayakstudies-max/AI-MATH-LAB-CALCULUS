@@ -48,6 +48,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "./style.css";
+import { WebAudioDSP } from "./WebAudioDSP.jsx";
+import { MultivariableVisualizer } from "./MultivariableVisualizer.jsx";
+import { ExportReportModal } from "./ExportReportModal.jsx";
+import { SpeedTangentsArena } from "./SpeedTangentsArena.jsx";
+import { clientEvaluateMVT } from "./clientMathEngine.js";
+
 
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
 
@@ -1773,6 +1779,7 @@ function ConvolutionVisualizer() {
 // MODULE 09: STEP-BY-STEP SOLVER & PRACTICE MODE
 // ====================================================
 function PracticeSolver() {
+  const [practiceTab, setPracticeTab] = useState("bank"); // "bank" | "arena"
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1844,6 +1851,31 @@ function PracticeSolver() {
 
   return (
     <div className="practice-layout">
+      {/* Tab Switcher: Problem Bank vs Speed Tangents Arena */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+        <button
+          type="button"
+          className={`filter-btn ${practiceTab === "bank" ? "active" : ""}`}
+          onClick={() => setPracticeTab("bank")}
+          style={{ padding: "8px 18px", fontSize: "13px" }}
+        >
+          Curated Problem Bank &amp; Step-by-Step Solver
+        </button>
+        <button
+          type="button"
+          className={`filter-btn ${practiceTab === "arena" ? "active" : ""}`}
+          onClick={() => setPracticeTab("arena")}
+          style={{ padding: "8px 18px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}
+        >
+          <Zap size={14} style={{ color: "var(--accent-crimson)" }} />
+          <span>Speed Tangents Challenge (Gamified Arena)</span>
+        </button>
+      </div>
+
+      {practiceTab === "arena" ? (
+        <SpeedTangentsArena MathFormula={MathFormula} />
+      ) : (
+        <>
       {/* Category & Difficulty Filter Bar */}
       <div className="practice-filters">
         <div className="filter-group">
@@ -2048,6 +2080,8 @@ function PracticeSolver() {
           })
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2615,6 +2649,14 @@ function FourierLab() {
           <span>Fourier Analysis: Decomposition of periodic signals into orthogonal harmonically-related sinusoids</span>
           <span>{data ? `${coeffs.length} harmonic components active` : "—"}</span>
         </div>
+
+        {/* Real-time Web Audio Synthesizer & Microphone FFT */}
+        <WebAudioDSP
+          waveform={waveform}
+          harmonics={harmonics}
+          fundamentalFreq={fundamentalFreq}
+          amplitude={amplitude}
+        />
       </section>
 
       {/* Analytics & Metrics Sidebar */}
@@ -3429,7 +3471,8 @@ function AppSidebar({
     { id: "taylor", label: "Taylor Series", code: "03", icon: Sparkles },
     { id: "riemann", label: "Riemann Sums", code: "04", icon: BarChart3 },
     { id: "critical", label: "Critical Points", code: "05", icon: TrendingUp },
-    { id: "limits", label: "Limits & Continuity", code: "06", icon: InfinityIcon }
+    { id: "limits", label: "Limits & Continuity", code: "06", icon: InfinityIcon },
+    { id: "multivariable", label: "3D Vector Calculus", code: "11", icon: Layers }
   ];
 
   const signalsItems = [
@@ -3608,6 +3651,8 @@ function AppSidebar({
 }
 
 function AppNavbar({
+  onOpenExport,
+  onTogglePresentation,
   domainMode,
   activePage,
   signalsTab,
@@ -3643,7 +3688,8 @@ function AppNavbar({
       taylor: "Module 03 · Taylor Series Approximator",
       riemann: "Module 04 · Riemann Sums Visualizer",
       critical: "Module 05 · Critical Points & Extrema",
-      limits: "Module 06 · Limits & Continuity"
+      limits: "Module 06 · Limits & Continuity",
+      multivariable: "Module 11 · 3D Vector Calculus"
     };
     return { pillar: "Calculus Core", module: names[activePage] || "Lab" };
   };
@@ -3674,6 +3720,27 @@ function AppNavbar({
       </div>
 
       <div className="navbar-right">
+        <button
+          type="button"
+          className="navbar-quick-btn"
+          onClick={onOpenExport}
+          title="Export Academic Lab Report or Jupyter Notebook"
+          style={{ borderColor: "rgba(138, 158, 140, 0.4)", color: "var(--accent-sage)" }}
+        >
+          <BookOpen size={14} />
+          <span>Export Report</span>
+        </button>
+
+        <button
+          type="button"
+          className="navbar-quick-btn"
+          onClick={onTogglePresentation}
+          title="Toggle Presentation / Classroom Projector Mode"
+        >
+          <Maximize2 size={14} />
+          <span>Lecture Mode</span>
+        </button>
+
         <button
           type="button"
           className="navbar-quick-btn"
@@ -4135,12 +4202,15 @@ function parseHash() {
   if (hash.startsWith("taylor")) return { domain: "calculus", page: "taylor" };
   if (hash.startsWith("riemann")) return { domain: "calculus", page: "riemann" };
   if (hash.startsWith("critical")) return { domain: "calculus", page: "critical" };
+  if (hash.startsWith("multivariable") || hash.startsWith("vector")) return { domain: "calculus", page: "multivariable" };
   if (hash.startsWith("limits")) return { domain: "calculus", page: "limits" };
   return { domain: "home" };
 }
 
 function App() {
   const [apiStatus, setApiStatus] = useState("checking");
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [presentationMode, setPresentationMode] = useState(false);
   const initialRoute = parseHash();
   const [domainMode, setDomainMode] = useState(initialRoute.domain || "home");
   const [signalsTab, setSignalsTab] = useState(initialRoute.signalsTab || "explorer");
@@ -4453,7 +4523,7 @@ function App() {
   const predictionError = numerical != null && ml != null ? Math.abs(ml - numerical) : null;
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${presentationMode ? "presentation-mode" : ""}`}>
       <div className="ambient-glow ambient-glow-one" aria-hidden="true" />
       <div className="ambient-glow ambient-glow-two" aria-hidden="true" />
       <div className="background-grid" aria-hidden="true" />
@@ -4483,6 +4553,8 @@ function App() {
       {/* Main Content Area */}
       <div className="app-main-content">
         <AppNavbar
+          onOpenExport={() => setExportModalOpen(true)}
+          onTogglePresentation={() => setPresentationMode(!presentationMode)}
           domainMode={domainMode}
           activePage={activePage}
           signalsTab={signalsTab}
@@ -4557,6 +4629,13 @@ function App() {
 
       {/* Universal Math Quick-Pad */}
       <MathKeypad onInsert={insertToken} />
+
+      {/* ======================================================== */}
+      {/* 11. MULTIVARIABLE 3D VECTOR CALCULUS MODULE              */}
+      {/* ======================================================== */}
+      {activePage === "multivariable" && (
+        <MultivariableVisualizer MathFormula={MathFormula} />
+      )}
 
       {/* ======================================================== */}
       {/* 1. MVT EXPLORER MODULE                                   */}
@@ -5410,6 +5489,15 @@ function App() {
 
         {/* Floating Quick Assistant */}
         <FloatingAICopilot onNavigate={navigateTo} />
+
+        {/* Academic Lab Report & Jupyter Exporter Modal */}
+        <ExportReportModal
+          isOpen={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          activeModule={activePage}
+          currentFormula={expression}
+          mathData={result}
+        />
 
         {/* Global Minimal Footer */}
         <footer className="app-footer">
