@@ -294,7 +294,7 @@ export function ExportReportModal({ isOpen, onClose, activeModule, currentFormul
                   Theoretical Foundations &amp; Rigorous Proof
                 </h4>
                 <p style={{ fontSize: "13px", color: "var(--text-main)", lineHeight: "1.6" }}>
-                  Calculated using exact closed-form differentiation and integration algorithms. In accordance with Cauchy's and Lagrange's analytical formulations, the instantaneous rate of change corresponds to the derivative map $f': \mathbb{R} \to \mathbb{R}$, guaranteed continuous across all points of differentiability.
+                  Calculated using exact closed-form differentiation and integration algorithms. In accordance with Cauchy's and Lagrange's analytical formulations, the instantaneous rate of change corresponds to the derivative map f&apos;: ℝ → ℝ, guaranteed continuous across all points of differentiability.
                 </p>
               </div>
 

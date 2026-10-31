@@ -2896,7 +2896,7 @@ function FourierLab() {
                 </div>
                 <div className="legend-item">
                   <span className="legend-marker trans-marker" />
-                  <span>Fourier Series Approximation f_{harmonics}(t)</span>
+                  <span>Fourier Series Approximation f<sub>{harmonics}</sub>(t)</span>
                 </div>
               </div>
               <span style={{ fontSize: "11px", color: "var(--accent-crimson)", fontFamily: "var(--font-mono)" }}>
@@ -5365,7 +5365,7 @@ function App() {
               <div className="calculus-visual-head">
                 <span>CONVERGENCE GRAPH</span>
                 <small>
-                  <i className="original-dot" /> Exact f(x) <i className="taylor-dot" /> Taylor P_{taylorOrder}(x)
+                  <i className="original-dot" /> Exact f(x) <i className="taylor-dot" /> Taylor P<sub>{taylorOrder}</sub>(x)
                 </small>
               </div>
               <TaylorPlot

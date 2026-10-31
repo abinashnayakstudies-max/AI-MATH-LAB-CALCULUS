@@ -8,7 +8,8 @@ import { Compass, Sparkles, Layers, Sliders, Play, RotateCcw, Crosshair } from "
  * Renders interactive 3D scalar fields z = f(x, y), exact analytical tangent planes,
  * gradient vector arrows (∇f), and vector field flows.
  */
-export function MultivariableVisualizer({ MathFormula }) {
+export function MultivariableVisualizer({ MathFormula: MathFormulaProp }) {
+  const MathFormula = MathFormulaProp || (({ tex }) => <code className="math-fallback">{tex}</code>);
   const mountRef = useRef(null);
   const [surfaceType, setSurfaceType] = useState("saddle");
   const [x0, setX0] = useState(0.6);
@@ -366,7 +367,7 @@ export function MultivariableVisualizer({ MathFormula }) {
                 onChange={(e) => setShowTangentPlane(e.target.checked)}
                 style={{ accentColor: "var(--accent-crimson)" }}
               />
-              <span>Tangent Plane ($T_{p}S$)</span>
+              <span>Tangent Plane (T_p S)</span>
             </label>
 
             <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
@@ -446,7 +447,7 @@ export function MultivariableVisualizer({ MathFormula }) {
               />
             </div>
             <small style={{ display: "block", marginTop: "6px" }}>
-              Linearization approximation $L(x, y)$ around $({x0}, {y0})$
+              Linearization approximation L(x, y) around ({x0.toFixed(2)}, {y0.toFixed(2)})
             </small>
           </div>
 
