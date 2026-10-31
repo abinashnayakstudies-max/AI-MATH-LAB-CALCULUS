@@ -41,7 +41,10 @@ import {
   Bot,
   MessageSquare,
   Send,
-  User
+  User,
+  Search,
+  PenTool,
+  Copy
 } from "lucide-react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -58,6 +61,17 @@ import { CURATED_PROBLEMS } from "./curatedProblems.js";
 
 
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
+
+// ----------------------------------------------------
+// Safe Number Formatter (Never throws on undefined/null/string)
+// ----------------------------------------------------
+function safeNum(val, digits = 4, exp = false) {
+  if (val == null || val === "") return "—";
+  const n = Number(val);
+  if (!Number.isFinite(n)) return "—";
+  if (exp) return n.toExponential(digits);
+  return n.toFixed(digits);
+}
 
 // ----------------------------------------------------
 // Safe KaTeX Helper (Never emits raw red KaTeX parse error HTML)
@@ -274,22 +288,28 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
-    while (mount.firstChild) mount.removeChild(mount.firstChild);
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0a080c");
+    let renderer, scene, camera, controls, animFrame = 0;
+    try {
+      while (mount.firstChild) mount.removeChild(mount.firstChild);
 
-    const camera = new THREE.PerspectiveCamera(40, mount.clientWidth / Math.max(mount.clientHeight, 1), 0.1, 2000);
-    camera.position.set(0.6, 3.2, 11.0);
-    cameraRef.current = camera;
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color("#0a080c");
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    mount.appendChild(renderer.domElement);
+      const width = Math.max(mount.clientWidth, 320);
+      const height = Math.max(mount.clientHeight, 360);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+      camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 2000);
+      camera.position.set(0.6, 3.2, 11.0);
+      cameraRef.current = camera;
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(width, height);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      mount.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
     controls.target.set(0, 0, 0);
@@ -538,32 +558,48 @@ function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
     };
     window.addEventListener("resize", resize);
 
-    let frame = 0;
+    let animFrame = 0;
     const animate = () => {
-      frame = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
+      animFrame = requestAnimationFrame(animate);
+      try {
+        if (controls) controls.update();
+        if (renderer && scene && camera) renderer.render(scene, camera);
+      } catch (_) {}
     };
     animate();
 
     return () => {
-      cancelAnimationFrame(frame);
+      cancelAnimationFrame(animFrame);
       window.removeEventListener("resize", resize);
-      renderer.domElement.removeEventListener("pointermove", onPointerMove);
-      renderer.domElement.removeEventListener("click", onPointerClick);
-      controls.dispose();
-      renderer.dispose();
-      scene.traverse(obj => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          (Array.isArray(obj.material) ? obj.material : [obj.material]).forEach(m => {
-            if (m.map) m.map.dispose();
-            m.dispose();
+      try {
+        if (renderer?.domElement) {
+          renderer.domElement.removeEventListener("pointermove", onPointerMove);
+          renderer.domElement.removeEventListener("click", onPointerClick);
+        }
+        if (controls) controls.dispose();
+        if (renderer) renderer.dispose();
+        if (scene) {
+          scene.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+              (Array.isArray(obj.material) ? obj.material : [obj.material]).forEach(m => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+              });
+            }
           });
         }
-      });
-      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
+        if (renderer?.domElement?.parentNode === mount) {
+          mount.removeChild(renderer.domElement);
+        }
+      } catch (_) {}
     };
+  } catch (webglErr) {
+    console.warn("MVTScene WebGL setup warning:", webglErr);
+    return () => {
+      cancelAnimationFrame(animFrame);
+    };
+  }
   }, [plot, result, inspectX, inspectValue, autoRotate]);
 
   const setCameraView = mode => {
@@ -1786,23 +1822,40 @@ function PracticeSolver() {
   const [loading, setLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [scratchpadOpen, setScratchpadOpen] = useState(false);
+  const [scratchNotes, setScratchNotes] = useState(() => {
+    try {
+      return localStorage.getItem("ai_math_scratchpad") || "";
+    } catch {
+      return "";
+    }
+  });
 
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [verifications, setVerifications] = useState({});
   const [showHints, setShowHints] = useState({});
   const [showSolutions, setShowSolutions] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
   const [verifyingId, setVerifyingId] = useState(null);
+  const [completedIds, setCompletedIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("ai_math_completed_problems") || "[]");
+    } catch {
+      return [];
+    }
+  });
 
   const fetchProblems = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`${API}/practice/problems`);
       const data = await response.json();
-      if (data?.problems) {
+      if (data?.problems && Array.isArray(data.problems) && data.problems.length > 0) {
         setProblems(data.problems);
       }
     } catch {
-      // Offline fallback
+      // Instant offline fallback with master problem bank
     } finally {
       setLoading(false);
     }
@@ -1824,6 +1877,32 @@ function PracticeSolver() {
     setShowSolutions(prev => ({ ...prev, [problemId]: !prev[problemId] }));
   };
 
+  const copyProblem = (prob) => {
+    try {
+      navigator.clipboard.writeText(`${prob.question}\nOptions:\n${prob.options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join("\n")}`);
+      setCopiedId(prob.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (_) {}
+  };
+
+  const handleNotesChange = (text) => {
+    setScratchNotes(text);
+    try {
+      localStorage.setItem("ai_math_scratchpad", text);
+    } catch (_) {}
+  };
+
+  const clearProgress = () => {
+    if (window.confirm("Reset all solved problems and practice history?")) {
+      setCompletedIds([]);
+      setVerifications({});
+      setSelectedAnswers({});
+      try {
+        localStorage.removeItem("ai_math_completed_problems");
+      } catch (_) {}
+    }
+  };
+
   const verifyProblem = async (problemId) => {
     const selectedIdx = selectedAnswers[problemId];
     if (selectedIdx === undefined) return;
@@ -1833,7 +1912,7 @@ function PracticeSolver() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(`${API}/practice/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1843,6 +1922,13 @@ function PracticeSolver() {
       clearTimeout(timeoutId);
       const data = await response.json();
       setVerifications(prev => ({ ...prev, [problemId]: data }));
+      if (data?.is_correct && !completedIds.includes(problemId)) {
+        const next = [...completedIds, problemId];
+        setCompletedIds(next);
+        try {
+          localStorage.setItem("ai_math_completed_problems", JSON.stringify(next));
+        } catch (_) {}
+      }
     } catch {
       // Instant Client-Side Verification Fallback
       if (prob) {
@@ -1853,6 +1939,13 @@ function PracticeSolver() {
           steps: prob.solution_steps || []
         };
         setVerifications(prev => ({ ...prev, [problemId]: localData }));
+        if (isCorrect && !completedIds.includes(problemId)) {
+          const next = [...completedIds, problemId];
+          setCompletedIds(next);
+          try {
+            localStorage.setItem("ai_math_completed_problems", JSON.stringify(next));
+          } catch (_) {}
+        }
       }
     } finally {
       setVerifyingId(null);
@@ -1863,15 +1956,19 @@ function PracticeSolver() {
     return problems.filter(p => {
       const matchCat = categoryFilter === "all" || p.category.toLowerCase() === categoryFilter.toLowerCase();
       const matchDiff = difficultyFilter === "all" || p.difficulty.toLowerCase() === difficultyFilter.toLowerCase();
-      return matchCat && matchDiff;
+      const q = searchQuery.toLowerCase().trim();
+      const matchSearch = !q || p.topic.toLowerCase().includes(q) || p.question.toLowerCase().includes(q);
+      return matchCat && matchDiff && matchSearch;
     });
-  }, [problems, categoryFilter, difficultyFilter]);
+  }, [problems, categoryFilter, difficultyFilter, searchQuery]);
+
+  const completionPct = Math.round((completedIds.length / Math.max(problems.length, 1)) * 100);
 
   return (
     <div className="practice-layout">
       {/* Tab Switcher: Problem Bank vs Speed Tangents Arena */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "20px" }}>
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
             className={`filter-btn ${practiceTab === "bank" ? "active" : ""}`}
@@ -1891,14 +1988,42 @@ function PracticeSolver() {
           </button>
         </div>
 
-        {/* Practice Stats Badge */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            Problems Available: <b style={{ color: "#f5efe6", fontFamily: "var(--font-mono)" }}>{problems.length}</b>
-          </span>
-          <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-            Verified: <b style={{ color: "#50e3c2", fontFamily: "var(--font-mono)" }}>{Object.keys(verifications).length}</b>
-          </span>
+        {/* Global Progress & Scratchpad Action */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="filter-btn"
+            onClick={() => setScratchpadOpen(!scratchpadOpen)}
+            style={{
+              padding: "6px 12px",
+              fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: scratchpadOpen ? "rgba(194, 59, 96, 0.2)" : "transparent",
+              borderColor: scratchpadOpen ? "var(--accent-crimson)" : "var(--border-subtle)"
+            }}
+          >
+            <PenTool size={13} style={{ color: "var(--accent-crimson)" }} />
+            <span>{scratchpadOpen ? "Hide Scratchpad" : "Open Scratchpad"}</span>
+          </button>
+
+          {completedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={clearProgress}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-dim)",
+                fontSize: "11px",
+                cursor: "pointer",
+                textDecoration: "underline"
+              }}
+            >
+              Reset Progress
+            </button>
+          )}
         </div>
       </div>
 
@@ -1906,218 +2031,373 @@ function PracticeSolver() {
         <SpeedTangentsArena MathFormula={MathFormula} />
       ) : (
         <>
-      {/* Category & Difficulty Filter Bar */}
-      <div className="practice-filters">
-        <div className="filter-group">
-          <span className="filter-label">DISCIPLINE:</span>
-          <button
-            type="button"
-            className={`filter-btn ${categoryFilter === "all" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("all")}
+          {/* Progress Tracker Banner */}
+          <div
+            className="panel"
+            style={{
+              padding: "16px 20px",
+              marginBottom: "20px",
+              borderRadius: "var(--radius-md)",
+              background: "linear-gradient(90deg, rgba(20, 16, 22, 0.95) 0%, rgba(120, 29, 57, 0.18) 100%)",
+              border: "1px solid var(--border-subtle)"
+            }}
           >
-            All Disciplines
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${categoryFilter === "calculus" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("calculus")}
-          >
-            Calculus Lab
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${categoryFilter === "signals" ? "active" : ""}`}
-            onClick={() => setCategoryFilter("signals")}
-          >
-            Signals &amp; Systems
-          </button>
-        </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <GraduationCap size={18} style={{ color: "var(--accent-sage)" }} />
+                <span style={{ fontSize: "13px", fontWeight: "600", color: "#f5efe6" }}>
+                  Curriculum Mastery: {completedIds.length} of {problems.length} Problems Solved
+                </span>
+              </div>
+              <span style={{ fontSize: "12px", color: "#50e3c2", fontFamily: "var(--font-mono)", fontWeight: "700" }}>
+                {completionPct}% Complete
+              </span>
+            </div>
 
-        <div className="filter-group">
-          <span className="filter-label">DIFFICULTY:</span>
-          <button
-            type="button"
-            className={`filter-btn ${difficultyFilter === "all" ? "active" : ""}`}
-            onClick={() => setDifficultyFilter("all")}
-          >
-            All Tiers
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${difficultyFilter === "fundamentals" ? "active" : ""}`}
-            onClick={() => setDifficultyFilter("fundamentals")}
-          >
-            Fundamentals
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${difficultyFilter === "standard" ? "active" : ""}`}
-            onClick={() => setDifficultyFilter("standard")}
-          >
-            Standard
-          </button>
-          <button
-            type="button"
-            className={`filter-btn ${difficultyFilter === "challenge" ? "active" : ""}`}
-            onClick={() => setDifficultyFilter("challenge")}
-          >
-            Challenge
-          </button>
-        </div>
-      </div>
-
-      {/* Problem Cards List */}
-      <div className="practice-cards-list">
-        {loading ? (
-          <div className="result-empty">Loading curated mathematical problem sets…</div>
-        ) : filteredProblems.length === 0 ? (
-          <div className="result-empty">No problems found matching active filters.</div>
-        ) : (
-          filteredProblems.map(prob => {
-            const verification = verifications[prob.id];
-            const isCorrect = verification?.is_correct;
-            const hasVerified = verification != null;
-            const isSolutionOpen = showSolutions[prob.id];
-            const isHintOpen = showHints[prob.id];
-            const selectedIdx = selectedAnswers[prob.id];
-
-            return (
+            {/* Visual Progress Bar */}
+            <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.08)", borderRadius: "3px", overflow: "hidden" }}>
               <div
-                key={prob.id}
-                className={`practice-card ${hasVerified ? (isCorrect ? "is-correct" : "is-incorrect") : ""}`}
-              >
-                {/* Header */}
-                <div className="practice-card-header">
-                  <div className="practice-meta">
-                    <span className="badge-tag">{prob.topic}</span>
-                    <span className={`difficulty-badge ${prob.difficulty.toLowerCase()}`}>
-                      {prob.difficulty}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: "12px", color: "var(--text-dim)", textTransform: "uppercase" }}>
-                    {prob.category === "calculus" ? "Calculus Core" : "Signal Theory"}
-                  </span>
-                </div>
+                style={{
+                  width: `${completionPct}%`,
+                  height: "100%",
+                  background: "linear-gradient(90deg, #8a9e8c 0%, #50e3c2 50%, #c23b60 100%)",
+                  transition: "width 0.4s ease"
+                }}
+              />
+            </div>
+          </div>
 
-                {/* Question */}
-                <div className="practice-question">
-                  <MathFormula tex={prob.question} />
-                </div>
+          {/* Interactive Scratchpad Drawer */}
+          {scratchpadOpen && (
+            <div
+              className="panel"
+              style={{
+                padding: "18px 20px",
+                marginBottom: "20px",
+                borderRadius: "var(--radius-md)",
+                background: "rgba(10, 8, 12, 0.95)",
+                border: "1px solid rgba(194, 59, 96, 0.4)"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <span style={{ fontSize: "12px", color: "var(--accent-sage)", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <PenTool size={13} />
+                  <span>Interactive Scratchpad &amp; Working Space</span>
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+                  Auto-saved to local browser storage
+                </span>
+              </div>
+              <textarea
+                value={scratchNotes}
+                onChange={(e) => handleNotesChange(e.target.value)}
+                placeholder="Jot down formulas, integration limits, or rough derivations here..."
+                style={{
+                  width: "100%",
+                  height: "80px",
+                  background: "rgba(0,0,0,0.4)",
+                  border: "1px solid var(--border-subtle)",
+                  borderRadius: "6px",
+                  color: "#f5efe6",
+                  padding: "10px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12px",
+                  resize: "vertical"
+                }}
+              />
+            </div>
+          )}
 
-                {/* Multiple Choice Options */}
-                <div className="practice-options">
-                  {prob.options.map((opt, optIdx) => {
-                    const isSelected = selectedIdx === optIdx;
-                    return (
-                      <button
-                        key={optIdx}
-                        type="button"
-                        className={`practice-option-btn ${isSelected ? "selected" : ""}`}
-                        onClick={() => selectOption(prob.id, optIdx)}
-                      >
-                        <span className="option-circle">{String.fromCharCode(65 + optIdx)}</span>
-                        <span><MathFormula tex={opt} /></span>
-                      </button>
-                    );
-                  })}
-                </div>
+          {/* Category & Difficulty Filter Bar with Live Search */}
+          <div className="practice-filters" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px" }}>
+            <div style={{ display: "flex", gap: "14px", flexWrap: "wrap" }}>
+              <div className="filter-group">
+                <span className="filter-label">DISCIPLINE:</span>
+                <button
+                  type="button"
+                  className={`filter-btn ${categoryFilter === "all" ? "active" : ""}`}
+                  onClick={() => setCategoryFilter("all")}
+                >
+                  All ({problems.length})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-btn ${categoryFilter === "calculus" ? "active" : ""}`}
+                  onClick={() => setCategoryFilter("calculus")}
+                >
+                  Calculus ({problems.filter(p => p.category === "calculus").length})
+                </button>
+                <button
+                  type="button"
+                  className={`filter-btn ${categoryFilter === "signals" ? "active" : ""}`}
+                  onClick={() => setCategoryFilter("signals")}
+                >
+                  Signals ({problems.filter(p => p.category === "signals").length})
+                </button>
+              </div>
 
-                {/* Actions & Verification Bar */}
-                <div className="practice-actions">
-                  <button
-                    type="button"
-                    className="primary-button"
-                    style={{ padding: "8px 18px", height: "auto" }}
-                    onClick={() => verifyProblem(prob.id)}
-                    disabled={selectedIdx === undefined || verifyingId === prob.id}
-                  >
-                    <Check size={14} />
-                    {verifyingId === prob.id ? "Verifying…" : "Verify Answer"}
-                  </button>
+              <div className="filter-group">
+                <span className="filter-label">DIFFICULTY:</span>
+                <button
+                  type="button"
+                  className={`filter-btn ${difficultyFilter === "all" ? "active" : ""}`}
+                  onClick={() => setDifficultyFilter("all")}
+                >
+                  All Tiers
+                </button>
+                <button
+                  type="button"
+                  className={`filter-btn ${difficultyFilter === "fundamentals" ? "active" : ""}`}
+                  onClick={() => setDifficultyFilter("fundamentals")}
+                >
+                  Fundamentals
+                </button>
+                <button
+                  type="button"
+                  className={`filter-btn ${difficultyFilter === "standard" ? "active" : ""}`}
+                  onClick={() => setDifficultyFilter("standard")}
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  className={`filter-btn ${difficultyFilter === "challenge" ? "active" : ""}`}
+                  onClick={() => setDifficultyFilter("challenge")}
+                >
+                  Challenge
+                </button>
+              </div>
+            </div>
 
-                  <button
-                    type="button"
-                    className="filter-btn"
-                    onClick={() => toggleHint(prob.id)}
-                  >
-                    <Lightbulb size={13} />
-                    {isHintOpen ? "Hide Hint" : "Need a Hint?"}
-                  </button>
+            {/* Search Input */}
+            <div style={{ position: "relative", minWidth: "240px", flex: 1, maxWidth: "340px" }}>
+              <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-dim)" }} />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search topic or equation..."
+                style={{
+                  width: "100%",
+                  padding: "7px 10px 7px 32px",
+                  fontSize: "12px",
+                  background: "rgba(20, 16, 22, 0.7)",
+                  border: "1px solid var(--border-subtle)",
+                  borderRadius: "6px",
+                  color: "#f5efe6"
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  style={{
+                    position: "absolute",
+                    right: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-dim)",
+                    cursor: "pointer"
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
 
-                  {hasVerified && (
-                    <button
-                      type="button"
-                      className="filter-btn"
-                      onClick={() => toggleSolution(prob.id)}
-                      style={{ marginLeft: "auto", borderColor: "rgba(194, 59, 96, 0.4)" }}
-                    >
-                      <BookOpen size={13} />
-                      {isSolutionOpen ? "Collapse Steps" : "View Step-by-Step Solution"}
-                      {isSolutionOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                    </button>
-                  )}
-                </div>
+          {/* Problem Cards List */}
+          <div className="practice-cards-list">
+            {loading ? (
+              <div className="result-empty">Loading curated mathematical problem sets…</div>
+            ) : filteredProblems.length === 0 ? (
+              <div className="result-empty">No problems found matching active search or filters.</div>
+            ) : (
+              filteredProblems.map(prob => {
+                const verification = verifications[prob.id];
+                const isCorrect = verification?.is_correct;
+                const hasVerified = verification != null;
+                const isSolutionOpen = showSolutions[prob.id];
+                const isHintOpen = showHints[prob.id];
+                const selectedIdx = selectedAnswers[prob.id];
+                const isCompleted = completedIds.includes(prob.id);
 
-                {/* Hint Drawer */}
-                {isHintOpen && (
-                  <div className="hint-box">
-                    <strong>Pedagogical Hint:</strong> <MathFormula tex={prob.hint} />
-                  </div>
-                )}
-
-                {/* Verification Result Banner */}
-                {hasVerified && (
+                return (
                   <div
+                    key={prob.id}
+                    className={`practice-card ${hasVerified ? (isCorrect ? "is-correct" : "is-incorrect") : ""}`}
                     style={{
-                      marginTop: "14px",
-                      padding: "10px 14px",
-                      borderRadius: "var(--radius-sm)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      background: isCorrect ? "rgba(138, 158, 140, 0.15)" : "rgba(194, 59, 96, 0.15)",
-                      color: isCorrect ? "#a8bca9" : "#e07a93",
-                      fontSize: "13px"
+                      borderColor: isCompleted ? "rgba(80, 227, 194, 0.45)" : undefined,
+                      boxShadow: isCompleted ? "0 4px 20px rgba(80, 227, 194, 0.08)" : undefined
                     }}
                   >
-                    {isCorrect ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                    <span>
-                      {isCorrect
-                        ? "Correct! Excellent mathematical reasoning."
-                        : "Not quite — review the hint or expand the step-by-step solution below."}
-                    </span>
-                  </div>
-                )}
-
-                {/* Step-by-Step Solution Breakdown */}
-                {isSolutionOpen && verification?.steps && (
-                  <div className="solution-steps">
-                    <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      VERIFIED STEP-BY-STEP DERIVATION:
-                    </span>
-                    {verification.steps.map((st, sIdx) => (
-                      <div key={sIdx} className="step-item">
-                        <div className="step-item-title">Step {sIdx + 1}: {st.title}</div>
-                        <div className="step-item-content">
-                          <MathFormula tex={st.content} />
-                        </div>
+                    {/* Header */}
+                    <div className="practice-card-header">
+                      <div className="practice-meta" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <span className="badge-tag">{prob.topic}</span>
+                        <span className={`difficulty-badge ${prob.difficulty.toLowerCase()}`}>
+                          {prob.difficulty}
+                        </span>
+                        {isCompleted && (
+                          <span
+                            style={{
+                              background: "rgba(80, 227, 194, 0.2)",
+                              color: "#50e3c2",
+                              border: "1px solid #50e3c2",
+                              borderRadius: "4px",
+                              padding: "2px 8px",
+                              fontSize: "11px",
+                              fontWeight: "700"
+                            }}
+                          >
+                            ✓ Solved
+                          </span>
+                        )}
                       </div>
-                    ))}
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <button
+                          type="button"
+                          onClick={() => copyProblem(prob)}
+                          title="Copy problem statement as LaTeX"
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: copiedId === prob.id ? "#50e3c2" : "var(--text-dim)",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "11px"
+                          }}
+                        >
+                          <Copy size={13} />
+                          <span>{copiedId === prob.id ? "Copied!" : "Copy"}</span>
+                        </button>
+                        <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase" }}>
+                          {prob.category === "calculus" ? "Calculus Core" : "Signal Theory"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Question */}
+                    <div className="practice-question">
+                      <MathFormula tex={prob.question} />
+                    </div>
+
+                    {/* Multiple Choice Options */}
+                    <div className="practice-options">
+                      {prob.options.map((opt, optIdx) => {
+                        const isSelected = selectedIdx === optIdx;
+                        return (
+                          <button
+                            key={optIdx}
+                            type="button"
+                            className={`practice-option-btn ${isSelected ? "selected" : ""}`}
+                            onClick={() => selectOption(prob.id, optIdx)}
+                          >
+                            <span className="option-circle">{String.fromCharCode(65 + optIdx)}</span>
+                            <span><MathFormula tex={opt} /></span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Actions & Verification Bar */}
+                    <div className="practice-actions">
+                      <button
+                        type="button"
+                        className="primary-button"
+                        style={{ padding: "8px 18px", height: "auto" }}
+                        onClick={() => verifyProblem(prob.id)}
+                        disabled={selectedIdx === undefined || verifyingId === prob.id}
+                      >
+                        <Check size={14} />
+                        <span>{verifyingId === prob.id ? "Verifying…" : "Verify Answer"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="filter-btn"
+                        onClick={() => toggleHint(prob.id)}
+                      >
+                        <Lightbulb size={13} />
+                        <span>{isHintOpen ? "Hide Hint" : "Need a Hint?"}</span>
+                      </button>
+
+                      {hasVerified && (
+                        <button
+                          type="button"
+                          className="filter-btn"
+                          onClick={() => toggleSolution(prob.id)}
+                          style={{ marginLeft: "auto", borderColor: "rgba(194, 59, 96, 0.4)" }}
+                        >
+                          <BookOpen size={13} />
+                          <span>{isSolutionOpen ? "Collapse Steps" : "View Step-by-Step Proof"}</span>
+                          {isSolutionOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Hint Drawer */}
+                    {isHintOpen && (
+                      <div className="hint-box">
+                        <strong>Pedagogical Hint:</strong> <MathFormula tex={prob.hint} />
+                      </div>
+                    )}
+
+                    {/* Verification Result Banner */}
+                    {hasVerified && (
+                      <div
+                        style={{
+                          marginTop: "14px",
+                          padding: "10px 14px",
+                          borderRadius: "var(--radius-sm)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          background: isCorrect ? "rgba(80, 227, 194, 0.15)" : "rgba(194, 59, 96, 0.15)",
+                          border: `1px solid ${isCorrect ? "rgba(80, 227, 194, 0.4)" : "rgba(194, 59, 96, 0.4)"}`,
+                          color: isCorrect ? "#50e3c2" : "#ff7b94",
+                          fontSize: "13px"
+                        }}
+                      >
+                        {isCorrect ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                        <span>
+                          {isCorrect
+                            ? "Correct! Excellent mathematical deduction. Problem marked as solved."
+                            : "Not quite — review the pedagogical hint or expand the full derivation steps below."}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Step-by-Step Solution Breakdown */}
+                    {isSolutionOpen && (verification?.steps || prob.solution_steps) && (
+                      <div className="solution-steps">
+                        <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                          VERIFIED STEP-BY-STEP DERIVATION:
+                        </span>
+                        {(verification?.steps || prob.solution_steps).map((st, sIdx) => (
+                          <div key={sIdx} className="step-item">
+                            <div className="step-item-title">Step {sIdx + 1}: {st.title}</div>
+                            <div className="step-item-content">
+                              <MathFormula tex={st.content} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+                );
+              })
+            )}
+          </div>
         </>
       )}
     </div>
   );
 }
-
-// Main Application Component
-// ----------------------------------------------------
 
 function LTIAnalyzer() {
   const [systemId, setSystemId] = useState("delay");
@@ -4392,7 +4672,12 @@ function App() {
       setResult(data);
       if (data && !data.error) setApiStatus("online");
     } catch {
-      setResult({ error: "Could not connect to backend. The free-tier cloud instance might be waking up (~30-45s). Please wait a moment and click Recalculate." });
+      const fallbackResult = clientEvaluateMVT(expression, Number(a), Number(b));
+      if (fallbackResult) {
+        setResult(fallbackResult);
+      } else {
+        setResult({ error: "Could not connect to backend. The free-tier cloud instance might be waking up (~30-45s). Please wait a moment and click Recalculate." });
+      }
     } finally {
       setLoading(false);
     }
@@ -4616,7 +4901,7 @@ function App() {
           )}
 
       {domainMode === "calculus" && activePage !== "multivariable" && (
-        <>
+        <ErrorBoundary componentName="Calculus Core Lab">
       {/* Hero Section with KaTeX Header Formula */}
       <section className="title-row">
         <div>
@@ -4769,7 +5054,7 @@ function App() {
                 <>
                   <div className="verified-box">
                     <span>FINAL VERIFIED MVT POINT</span>
-                    <strong>{hybrid?.toFixed(6)}</strong>
+                    <strong>{safeNum(hybrid, 6)}</strong>
                     <small>
                       <Check size={12} /> Derivative matches secant slope
                     </small>
@@ -4777,23 +5062,23 @@ function App() {
 
                   <div className="result-row">
                     <span>Numerical Canonical c</span>
-                    <b>{numerical?.toFixed(6)}</b>
+                    <b>{safeNum(numerical, 6)}</b>
                   </div>
                   <div className="result-row">
                     <span>AI Predicted c</span>
-                    <b>{ml?.toFixed(6) ?? "—"}</b>
+                    <b>{safeNum(ml, 6)}</b>
                   </div>
                   <div className="result-row">
                     <span>AI Prediction Error</span>
-                    <b>{predictionError ? predictionError.toFixed(6) : "—"}</b>
+                    <b>{safeNum(predictionError, 6)}</b>
                   </div>
                   <div className="result-row">
                     <span>Secant Slope</span>
-                    <b>{result.secant_slope?.toFixed(6)}</b>
+                    <b>{safeNum(result?.secant_slope, 6)}</b>
                   </div>
                   <div className="result-row">
                     <span>Hybrid Residual</span>
-                    <b>{result.hybrid_residual ? result.hybrid_residual.toExponential(2) : "0.0"}</b>
+                    <b>{safeNum(result?.hybrid_residual, 2, true)}</b>
                   </div>
 
                   <div className="detected">
@@ -4812,8 +5097,8 @@ function App() {
                             title="Click to pin this coordinate"
                             onClick={() => pinPoint(cVal, p.y)}
                           >
-                            <b>c = {cVal.toFixed(5)}</b>
-                            <span>f(c) ≈ {Number.isFinite(p.y) ? p.y.toFixed(5) : "—"}</span>
+                            <b>c = {safeNum(cVal, 5)}</b>
+                            <span>f(c) ≈ {safeNum(p.y, 5)}</span>
                           </button>
                         );
                       })}
@@ -4844,7 +5129,7 @@ function App() {
               ) : valueResult ? (
                 <>
                   <span>EVALUATED COORDINATE</span>
-                  <strong>({Number(valueResult.x).toFixed(4)}, {Number(valueResult.value).toFixed(4)})</strong>
+                  <strong>({safeNum(valueResult?.x, 4)}, {safeNum(valueResult?.value, 4)})</strong>
                 </>
               ) : (
                 <span className="muted">No coordinate pinned yet.</span>
@@ -5451,7 +5736,7 @@ function App() {
           </div>
         </section>
       )}
-        </>
+        </ErrorBoundary>
       )}
 
       {/* ======================================================== */}
@@ -5498,7 +5783,11 @@ function App() {
       {/* ======================================================== */}
       {/* ABOUT & ARCHITECTURE VIEW                                */}
       {/* ======================================================== */}
-      {domainMode === "about" && <AboutView />}
+      {domainMode === "about" && (
+        <ErrorBoundary componentName="System Architecture & Foundations">
+          <AboutView />
+        </ErrorBoundary>
+      )}
 
       {/* ======================================================== */}
       {/* PRACTICE MODE & STEP-BY-STEP SOLVER                      */}
@@ -5551,4 +5840,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <ErrorBoundary componentName="AI Math Lab Platform">
+    <App />
+  </ErrorBoundary>
+);

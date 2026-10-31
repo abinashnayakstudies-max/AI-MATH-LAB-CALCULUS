@@ -72,19 +72,20 @@ class SoundEngine {
 
   miss() {
     if (this.muted) return;
-    this.playTone(220, "sawtooth", 0.2, 0.08);
-    setTimeout(() => this.playTone(185, "sawtooth", 0.25, 0.08), 100);
+    this.playTone(220, "sawtooth", 0.18, 0.12);
+    setTimeout(() => this.playTone(174.61, "sawtooth", 0.25, 0.14), 100);
   }
 
   tick() {
-    this.playTone(880, "sine", 0.04, 0.04);
+    if (this.muted) return;
+    this.playTone(880, "sine", 0.03, 0.05);
   }
 }
 
 const sounds = new SoundEngine();
 
 export function SpeedTangentsArena({ MathFormula }) {
-  // Game Modes: "mvt" (Speed Tangents) | "extrema" (Critical Point Sniper) | "riemann" (Area Estimator)
+  // Game Modes: "mvt" (Speed Tangents) | "extrema" (Critical Point Sniper) | "riemann" (Riemann Area Blitz)
   const [gameMode, setGameMode] = useState("mvt");
   const [gameState, setGameState] = useState("idle"); // "idle" | "playing" | "round_result" | "game_over"
   const [round, setRound] = useState(1);
@@ -160,6 +161,27 @@ export function SpeedTangentsArena({ MathFormula }) {
             const ratio = Math.min(Math.max(secant / (1.6 * 1.2), -1), 1);
             return Math.acos(ratio) / 1.2;
           }
+        },
+        {
+          name: "f(x) = 2.0 e^{-0.4 x^2}",
+          latex: "f(x) = 2.0 e^{-0.4 x^2}",
+          f: (x) => 2.0 * Math.exp(-0.4 * x * x),
+          df: (x) => 2.0 * (-0.8 * x) * Math.exp(-0.4 * x * x),
+          a: -1.8,
+          b: 1.8,
+          solveC: () => 0.0
+        },
+        {
+          name: "f(x) = 0.3x^3 - x + 0.8",
+          latex: "f(x) = 0.3x^3 - x + 0.8",
+          f: (x) => 0.3 * x * x * x - x + 0.8,
+          df: (x) => 0.9 * x * x - 1.0,
+          a: -2.0,
+          b: 2.0,
+          solveC: (a, b) => {
+            const secant = (0.3 * (b * b * b - a * a * a) - (b - a)) / (b - a);
+            return Math.sqrt(Math.max((secant + 1.0) / 0.9, 0));
+          }
         }
       ];
       const p = bank[Math.floor(Math.random() * bank.length)];
@@ -169,30 +191,101 @@ export function SpeedTangentsArena({ MathFormula }) {
         secantSlope: (p.f(p.b) - p.f(p.a)) / (p.b - p.a)
       };
     } else if (mode === "extrema") {
-      // Extrema sniper: Cubic with stationary points at x = -1 and x = +1
-      return {
-        name: "f(x) = 0.5(x^3 - 3x)",
-        latex: "f(x) = 0.5(x^3 - 3x)",
-        f: (x) => 0.5 * (x * x * x - 3 * x),
-        df: (x) => 0.5 * (3 * x * x - 3),
-        a: -2.3,
-        b: 2.3,
-        targets: [
-          { x: -1.0, type: "Local Maximum", y: 1.0 },
-          { x: 1.0, type: "Local Minimum", y: -1.0 }
-        ]
-      };
+      const bank = [
+        {
+          name: "f(x) = 0.5(x^3 - 3x)",
+          latex: "f(x) = 0.5(x^3 - 3x)",
+          f: (x) => 0.5 * (x * x * x - 3 * x),
+          df: (x) => 0.5 * (3 * x * x - 3),
+          a: -2.3,
+          b: 2.3,
+          targets: [
+            { x: -1.0, type: "Local Maximum", y: 1.0 },
+            { x: 1.0, type: "Local Minimum", y: -1.0 }
+          ]
+        },
+        {
+          name: "f(x) = 0.2(x^4 - 4x^2)",
+          latex: "f(x) = 0.2(x^4 - 4x^2)",
+          f: (x) => 0.2 * (x * x * x * x - 4 * x * x),
+          df: (x) => 0.2 * (4 * x * x * x - 8 * x),
+          a: -2.2,
+          b: 2.2,
+          targets: [
+            { x: -1.41, type: "Left Minimum", y: -0.8 },
+            { x: 0.0, type: "Central Maximum", y: 0.0 },
+            { x: 1.41, type: "Right Minimum", y: -0.8 }
+          ]
+        },
+        {
+          name: "f(x) = 1.5\\cos(x)",
+          latex: "f(x) = 1.5\\cos(x)",
+          f: (x) => 1.5 * Math.cos(x),
+          df: (x) => -1.5 * Math.sin(x),
+          a: -3.14,
+          b: 3.14,
+          targets: [
+            { x: 0.0, type: "Peak Crest (f'=0)", y: 1.5 }
+          ]
+        },
+        {
+          name: "f(x) = -0.6(x^2 - 4)",
+          latex: "f(x) = -0.6x^2 + 2.4",
+          f: (x) => -0.6 * x * x + 2.4,
+          df: (x) => -1.2 * x,
+          a: -2.5,
+          b: 2.5,
+          targets: [
+            { x: 0.0, type: "Parabolic Apex", y: 2.4 }
+          ]
+        }
+      ];
+      return bank[Math.floor(Math.random() * bank.length)];
     } else {
-      // Riemann area blitz
-      const areaVal = (1 / 3) * (Math.pow(2.0, 3) - Math.pow(0, 3));
-      return {
-        name: "f(x) = x^2 on [0, 2]",
-        latex: "\\int_0^2 x^2\\,dx = \\frac{8}{3} \\approx 2.67",
-        f: (x) => x * x,
-        a: 0,
-        b: 2.0,
-        trueArea: areaVal
-      };
+      // Riemann Area Blitz
+      const bank = [
+        {
+          name: "f(x) = x^2 on [0, 2]",
+          latex: "\\int_0^2 x^2\\,dx = \\frac{8}{3} \\approx 2.67",
+          f: (x) => x * x,
+          a: 0,
+          b: 2.0,
+          trueArea: 2.667
+        },
+        {
+          name: "f(x) = \\sin(x) on [0, \\pi]",
+          latex: "\\int_0^\\pi \\sin(x)\\,dx = 2.00",
+          f: (x) => Math.sin(x),
+          a: 0,
+          b: 3.1416,
+          trueArea: 2.00
+        },
+        {
+          name: "f(x) = 3x - x^2 on [0, 3]",
+          latex: "\\int_0^3 (3x - x^2)\\,dx = 4.50",
+          f: (x) => 3 * x - x * x,
+          a: 0,
+          b: 3.0,
+          trueArea: 4.50
+        },
+        {
+          name: "f(x) = 0.5x + 1 on [0, 4]",
+          latex: "\\int_0^4 (0.5x + 1)\\,dx = 8.00",
+          f: (x) => 0.5 * x + 1,
+          a: 0,
+          b: 4.0,
+          trueArea: 8.00
+        },
+        {
+          name: "f(x) = e^{0.5x} on [0, 2]",
+          latex: "\\int_0^2 e^{0.5x}\\,dx \\approx 3.44",
+          f: (x) => Math.exp(0.5 * x),
+          a: 0,
+          b: 2.0,
+          trueArea: 3.437
+        }
+      ];
+      return bank[Math.floor(Math.random() * bank.length)];
     }
   }
 
@@ -235,7 +328,13 @@ export function SpeedTangentsArena({ MathFormula }) {
 
     const newP = createProblem(mode);
     setProblem(newP);
-    setUserGuess((newP.a + newP.b) / 2);
+    if (mode === "mvt") {
+      setUserGuess((newP.a + newP.b) / 2);
+    } else if (mode === "riemann") {
+      setUserGuess(Number((newP.trueArea * 0.75).toFixed(2)));
+    } else {
+      setUserGuess(0);
+    }
     setTimeLeft(mode === "extrema" ? 20 : 15);
     setGameState("playing");
   };
@@ -271,7 +370,7 @@ export function SpeedTangentsArena({ MathFormula }) {
       setStreak(curStreak);
       if (curStreak > maxStreak) setMaxStreak(curStreak);
 
-      const multiplier = 1 + (curStreak > 1 ? (curStreak - 1) * 0.15 : 0);
+      const multiplier = 1 + (curStreak > 1 ? (curStreak - 1) * 0.2 : 0);
       const earned = Math.round(basePts * multiplier);
       const newScore = score + earned;
       setScore(newScore);
@@ -298,12 +397,16 @@ export function SpeedTangentsArena({ MathFormula }) {
       // Extrema sniper evaluation
       const targets = problem.targets || [];
       const foundCount = extremaFound.length;
-      let earned = foundCount * 600 + timeLeft * 30;
+      let earned = foundCount * 650 + timeLeft * 35;
       if (foundCount === targets.length) {
         sounds.bullseye();
       } else {
         sounds.miss();
       }
+
+      const curStreak = foundCount === targets.length ? streak + 1 : 0;
+      setStreak(curStreak);
+      if (curStreak > maxStreak) setMaxStreak(curStreak);
 
       const roundSummary = {
         round,
@@ -312,6 +415,59 @@ export function SpeedTangentsArena({ MathFormula }) {
         points: earned
       };
       setScore((s) => s + earned);
+      setLastResult(roundSummary);
+      setRoundHistory((prev) => [...prev, roundSummary]);
+      setGameState("round_result");
+    } else if (gameMode === "riemann") {
+      // Riemann Area Blitz
+      const error = Math.abs(userGuess - problem.trueArea);
+      const percentError = (error / Math.max(problem.trueArea, 0.1)) * 100;
+      let accuracy = Math.max(0, 100 - percentError);
+      let rank = "Missed";
+      let basePts = 50;
+
+      if (accuracy >= 90) {
+        rank = "🎯 AREA MASTER! EXACT INTEGRAL FIT";
+        basePts = 1300 + timeLeft * 50;
+        sounds.bullseye();
+      } else if (accuracy >= 75) {
+        rank = "✨ SHARP GEOMETRIC INTUITION";
+        basePts = 850 + timeLeft * 25;
+        sounds.success();
+      } else if (accuracy >= 55) {
+        rank = "👍 FAIR APPROXIMATION";
+        basePts = 450;
+        sounds.success();
+      } else {
+        rank = "❌ INTEGRAL DIVERGENCE";
+        basePts = isTimeOut ? 0 : 50;
+        sounds.miss();
+      }
+
+      const curStreak = accuracy >= 55 ? streak + 1 : 0;
+      setStreak(curStreak);
+      if (curStreak > maxStreak) setMaxStreak(curStreak);
+
+      const multiplier = 1 + (curStreak > 1 ? (curStreak - 1) * 0.2 : 0);
+      const earned = Math.round(basePts * multiplier);
+      const newScore = score + earned;
+      setScore(newScore);
+
+      if (newScore > highScore) {
+        setHighScore(newScore);
+        localStorage.setItem("ai_math_arena_high_score", String(newScore));
+      }
+
+      const roundSummary = {
+        round,
+        rank,
+        accuracy: accuracy.toFixed(1),
+        error: error.toFixed(2),
+        userGuess: userGuess.toFixed(2),
+        trueVal: problem.trueArea.toFixed(2),
+        points: earned
+      };
+
       setLastResult(roundSummary);
       setRoundHistory((prev) => [...prev, roundSummary]);
       setGameState("round_result");
@@ -327,7 +483,13 @@ export function SpeedTangentsArena({ MathFormula }) {
     setRound(nextR);
     const newP = createProblem(gameMode);
     setProblem(newP);
-    setUserGuess((newP.a + newP.b) / 2);
+    if (gameMode === "mvt") {
+      setUserGuess((newP.a + newP.b) / 2);
+    } else if (gameMode === "riemann") {
+      setUserGuess(Number((newP.trueArea * 0.75).toFixed(2)));
+    } else {
+      setUserGuess(0);
+    }
     setExtremaFound([]);
     setTimeLeft(gameMode === "extrema" ? 20 : 15);
     setLastResult(null);
@@ -348,28 +510,30 @@ export function SpeedTangentsArena({ MathFormula }) {
   }
 
   const ys = pts.map((p) => p.y);
-  const minY = Math.min(...ys);
+  const minY = Math.min(...ys, 0);
   const maxY = Math.max(...ys);
 
   const mapX = (x) => pad + ((x - a) / (b - a || 1)) * (svgW - 2 * pad);
   const mapY = (y) => svgH - pad - ((y - minY) / (maxY - minY || 1)) * (svgH - 2 * pad);
   const curvePath = pts.reduce((acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${mapX(p.x)} ${mapY(p.y)}`, "");
 
-  // Secant Line
+  // Secant Line (MVT)
   const secX1 = mapX(a), secY1 = mapY(f(a));
   const secX2 = mapX(b), secY2 = mapY(f(b));
 
-  // User Tangent Line
-  const currentTangentSlope = problem.df ? problem.df(userGuess) : 0;
+  // User Tangent Line (MVT)
+  const currentTangentSlope = (gameMode === "mvt" && problem.df) ? problem.df(userGuess) : 0;
   const tangentSpan = (b - a) * 0.28;
-  const tanX1 = mapX(userGuess - tangentSpan);
-  const tanY1 = mapY(f(userGuess) - currentTangentSlope * tangentSpan);
-  const tanX2 = mapX(userGuess + tangentSpan);
-  const tanY2 = mapY(f(userGuess) + currentTangentSlope * tangentSpan);
+  const tanX1 = gameMode === "mvt" ? mapX(userGuess - tangentSpan) : 0;
+  const tanY1 = gameMode === "mvt" ? mapY(f(userGuess) - currentTangentSlope * tangentSpan) : 0;
+  const tanX2 = gameMode === "mvt" ? mapX(userGuess + tangentSpan) : 0;
+  const tanY2 = gameMode === "mvt" ? mapY(f(userGuess) + currentTangentSlope * tangentSpan) : 0;
 
   // Instant accuracy percentage for live dial
-  const liveError = Math.abs(userGuess - (problem.trueC ?? (a + b) / 2));
-  const liveAccuracy = Math.max(0, Math.min(100, Math.round(100 - liveError * 55)));
+  const liveMvtError = Math.abs(userGuess - (problem.trueC ?? (a + b) / 2));
+  const liveMvtAccuracy = Math.max(0, Math.min(100, Math.round(100 - liveMvtError * 55)));
+  const liveRiemannAccuracy = problem.trueArea ? Math.max(0, Math.min(100, Math.round(100 - (Math.abs(userGuess - problem.trueArea) / problem.trueArea) * 100))) : 0;
+  const liveAccuracy = gameMode === "riemann" ? liveRiemannAccuracy : liveMvtAccuracy;
 
   // Click on SVG to position tangent
   const handleSvgClick = (e) => {
@@ -385,7 +549,7 @@ export function SpeedTangentsArena({ MathFormula }) {
     } else if (gameMode === "extrema") {
       // Check if near any target
       const targets = problem.targets || [];
-      const hit = targets.find((t) => Math.abs(t.x - clampedX) < 0.25);
+      const hit = targets.find((t) => Math.abs(t.x - clampedX) < 0.28);
       if (hit && !extremaFound.includes(hit.type)) {
         sounds.success();
         setExtremaFound((prev) => [...prev, hit.type]);
@@ -399,134 +563,115 @@ export function SpeedTangentsArena({ MathFormula }) {
     <div
       className="speed-tangents-arena panel"
       style={{
-        marginTop: "16px",
-        background: "linear-gradient(180deg, rgba(20, 16, 22, 0.95) 0%, rgba(13, 11, 14, 0.98) 100%)",
-        border: "1px solid var(--border-subtle)",
-        borderRadius: "var(--radius-lg)",
         padding: "24px",
+        borderRadius: "var(--radius-lg)",
+        background: "rgba(14, 11, 16, 0.95)",
+        border: "1px solid rgba(194, 59, 96, 0.45)",
+        boxShadow: "0 12px 36px rgba(0, 0, 0, 0.65)",
         position: "relative",
         overflow: "hidden"
       }}
     >
-      {/* Top Header & Mode Switcher */}
+      {/* Header Bar */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "14px",
+          gap: "12px",
           borderBottom: "1px solid var(--border-subtle)",
           paddingBottom: "16px",
           marginBottom: "18px"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div
             style={{
-              width: "42px",
-              height: "42px",
-              borderRadius: "10px",
-              background: "linear-gradient(135deg, rgba(194, 59, 96, 0.4), rgba(120, 29, 57, 0.2))",
-              border: "1px solid var(--accent-crimson)",
+              width: "36px",
+              height: "36px",
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, rgba(194, 59, 96, 0.4), rgba(120, 29, 57, 0.8))",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               color: "#fff"
             }}
           >
-            <Zap size={22} />
+            <Zap size={20} />
           </div>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h2 style={{ fontSize: "17px", color: "#f5efe6", margin: 0, fontWeight: "700" }}>
-                Calculus Arcade: Precision Duel &amp; Speed Arena
-              </h2>
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "700",
-                  background: "rgba(80, 227, 194, 0.15)",
-                  color: "#50e3c2",
-                  border: "1px solid rgba(80, 227, 194, 0.35)",
-                  padding: "2px 6px",
-                  borderRadius: "4px"
-                }}
-              >
-                PRO EDITION
-              </span>
-            </div>
+            <h3 style={{ fontSize: "17px", color: "#f5efe6", margin: 0, fontWeight: "700" }}>
+              Calculus Arena: Round-Based Mathematical Duel
+            </h3>
             <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
-              Sharpen your geometric intuition under speed countdowns with instant feedback
+              High-intensity visual precision challenges across 5 competitive rounds
             </span>
           </div>
         </div>
 
-        {/* Global Gamification Badges */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "6px 12px",
-              borderRadius: "var(--radius-sm)",
-              background: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid var(--border-subtle)"
-            }}
-          >
-            <Trophy size={15} style={{ color: "var(--accent-amber)" }} />
-            <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>Best:</span>
-            <b style={{ color: "var(--accent-amber)", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{highScore}</b>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "6px 14px",
-              borderRadius: "var(--radius-sm)",
-              background: "rgba(194, 59, 96, 0.2)",
-              border: "1px solid rgba(194, 59, 96, 0.45)"
-            }}
-          >
-            <Sparkles size={15} style={{ color: "#fff" }} />
-            <span style={{ fontSize: "12px", color: "#f5efe6" }}>Score:</span>
-            <b style={{ color: "#fff", fontFamily: "var(--font-mono)", fontSize: "15px" }}>{score}</b>
-          </div>
-
+        {/* Live Score, Streak & High Score */}
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           {streak > 1 && (
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "4px",
-                padding: "6px 10px",
-                borderRadius: "var(--radius-sm)",
-                background: "linear-gradient(90deg, #781d39, #c23b60)",
-                color: "#fff",
+                padding: "4px 10px",
+                borderRadius: "var(--radius-full)",
+                background: "rgba(255, 107, 107, 0.2)",
+                border: "1px solid rgba(255, 107, 107, 0.5)",
+                color: "#ff6b6b",
                 fontSize: "12px",
                 fontWeight: "700"
               }}
             >
               <Flame size={14} />
-              <span>{streak}x COMBO</span>
+              <span>{streak}x STREAK</span>
             </div>
           )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>SCORE:</span>
+            <b
+              style={{
+                fontSize: "18px",
+                color: "#50e3c2",
+                fontFamily: "var(--font-mono)",
+                fontWeight: "700"
+              }}
+            >
+              {score}
+            </b>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <Trophy size={14} style={{ color: "var(--accent-amber)" }} />
+            <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>BEST:</span>
+            <b
+              style={{
+                fontSize: "14px",
+                color: "var(--accent-amber)",
+                fontFamily: "var(--font-mono)"
+              }}
+            >
+              {highScore}
+            </b>
+          </div>
 
           <button
             type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
-            title={soundEnabled ? "Mute Arcade Audio" : "Enable Arcade Audio"}
             style={{
-              background: "transparent",
+              background: "rgba(255, 255, 255, 0.05)",
               border: "1px solid var(--border-subtle)",
-              borderRadius: "var(--radius-sm)",
-              color: soundEnabled ? "var(--accent-sage)" : "var(--text-dim)",
-              padding: "6px 10px",
+              borderRadius: "6px",
+              padding: "6px",
+              color: soundEnabled ? "var(--accent-crimson)" : "var(--text-dim)",
               cursor: "pointer"
             }}
+            title={soundEnabled ? "Mute Web Audio SFX" : "Unmute Web Audio SFX"}
           >
             {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
@@ -534,7 +679,7 @@ export function SpeedTangentsArena({ MathFormula }) {
       </div>
 
       {/* Mode Selector Strip */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "20px" }}>
         <button
           type="button"
           className={`filter-btn ${gameMode === "mvt" ? "active" : ""}`}
@@ -550,6 +695,14 @@ export function SpeedTangentsArena({ MathFormula }) {
           style={{ padding: "8px 16px", fontSize: "12px" }}
         >
           🎯 Mode 2: Extrema Sniper (f'(x) = 0)
+        </button>
+        <button
+          type="button"
+          className={`filter-btn ${gameMode === "riemann" ? "active" : ""}`}
+          onClick={() => startNewGame("riemann")}
+          style={{ padding: "8px 16px", fontSize: "12px" }}
+        >
+          📊 Mode 3: Area Blitz (Riemann ∫ f(x) dx)
         </button>
       </div>
 
@@ -576,7 +729,7 @@ export function SpeedTangentsArena({ MathFormula }) {
             The Calculus Arena is Ready
           </h3>
           <p style={{ maxWidth: "560px", margin: "0 auto 24px", color: "var(--text-dim)", fontSize: "13px", lineHeight: "1.6" }}>
-            Test your visual speed and derivative precision across <b>5 rapid rounds</b>. Find the point $c$ guaranteed by the Mean Value Theorem before the 15-second fuse expires!
+            Test your visual speed and derivative precision across <b>5 rapid rounds</b>. Find the point $c$ guaranteed by the Mean Value Theorem, snipe local extrema, or eyeball enclosed Riemann areas before the 15-second fuse expires!
           </p>
           <button
             type="button"
@@ -598,38 +751,38 @@ export function SpeedTangentsArena({ MathFormula }) {
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <span
                 style={{
-                  background: "rgba(138, 158, 140, 0.2)",
-                  color: "var(--accent-sage)",
-                  border: "1px solid rgba(138, 158, 140, 0.35)",
-                  padding: "3px 8px",
-                  borderRadius: "4px",
-                  fontSize: "11px",
-                  fontWeight: "700"
+                  background: "rgba(194, 59, 96, 0.25)",
+                  border: "1px solid var(--accent-crimson)",
+                  color: "#f5efe6",
+                  padding: "3px 10px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "12px",
+                  fontWeight: "700",
+                  fontFamily: "var(--font-mono)"
                 }}
               >
-                ROUND {round} OF {totalRounds}
+                ROUND {round} / {totalRounds}
               </span>
-              <span style={{ fontSize: "13px", color: "#f5efe6", fontWeight: "600" }}>
-                Target: <code>{problem.name}</code> on $[{a}, {b}]$
+              <span style={{ fontSize: "14px", color: "#f5efe6", fontWeight: "600" }}>
+                <MathFormula tex={problem.latex || problem.name} />
               </span>
             </div>
 
-            {/* Countdown Timer with Pulsing Alert */}
+            {/* Countdown Timer with Pulsing Dial */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "8px",
-                padding: "6px 14px",
-                borderRadius: "var(--radius-full)",
-                background: timeLeft <= 5 ? "rgba(194, 59, 96, 0.4)" : "rgba(255,255,255,0.06)",
-                border: timeLeft <= 5 ? "1px solid var(--accent-crimson)" : "1px solid var(--border-subtle)",
-                animation: timeLeft <= 5 ? "pulse-border 1s infinite" : "none"
+                background: timeLeft <= 4 ? "rgba(194, 59, 96, 0.35)" : "rgba(255, 255, 255, 0.05)",
+                border: `1px solid ${timeLeft <= 4 ? "var(--accent-crimson)" : "var(--border-subtle)"}`,
+                padding: "4px 12px",
+                borderRadius: "var(--radius-full)"
               }}
             >
-              <Timer size={15} style={{ color: timeLeft <= 5 ? "#ff8fa3" : "#f5efe6" }} />
+              <Timer size={14} style={{ color: timeLeft <= 4 ? "var(--accent-crimson)" : "var(--accent-sage)" }} />
               <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>TIME:</span>
-              <b style={{ fontFamily: "var(--font-mono)", fontSize: "15px", color: timeLeft <= 5 ? "#fff" : "var(--accent-sage)" }}>
+              <b style={{ fontFamily: "var(--font-mono)", fontSize: "15px", color: timeLeft <= 4 ? "#ff6b6b" : "var(--accent-sage)" }}>
                 {timeLeft}s
               </b>
             </div>
@@ -643,13 +796,26 @@ export function SpeedTangentsArena({ MathFormula }) {
               borderRadius: "var(--radius-sm)",
               border: "1px solid var(--border-subtle)",
               overflow: "hidden",
-              cursor: "crosshair"
+              cursor: gameMode === "extrema" ? "crosshair" : "pointer"
             }}
             onClick={handleSvgClick}
           >
             <svg viewBox={`0 0 ${svgW} ${svgH}`} style={{ width: "100%", height: "auto", display: "block" }}>
               {/* Background Reference Lines */}
-              <line x1={pad} y1={mapY(0)} x2={svgW - pad} y2={mapY(0)} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
+              <line x1={pad} y1={mapY(0)} x2={svgW - pad} y2={mapY(0)} stroke="rgba(255,255,255,0.12)" strokeDasharray="3 3" />
+
+              {/* Mode 3: Riemann Integral Shaded Area */}
+              {gameMode === "riemann" && (
+                <g>
+                  <path
+                    d={`${curvePath} L ${mapX(b)} ${mapY(0)} L ${mapX(a)} ${mapY(0)} Z`}
+                    fill="rgba(194, 59, 96, 0.28)"
+                    stroke="none"
+                  />
+                  <line x1={mapX(a)} y1={mapY(0)} x2={mapX(a)} y2={mapY(f(a))} stroke="#8a9e8c" strokeWidth="2" strokeDasharray="3 3" />
+                  <line x1={mapX(b)} y1={mapY(0)} x2={mapX(b)} y2={mapY(f(b))} stroke="#8a9e8c" strokeWidth="2" strokeDasharray="3 3" />
+                </g>
+              )}
 
               {/* Mode 1: Secant Line (Dashed Sage) */}
               {gameMode === "mvt" && (
@@ -690,13 +856,13 @@ export function SpeedTangentsArena({ MathFormula }) {
                       <circle
                         cx={mapX(tgt.x)}
                         cy={mapY(tgt.y)}
-                        r={isFound ? 8 : 12}
+                        r={isFound ? 8 : 13}
                         fill={isFound ? "#50e3c2" : "rgba(194, 59, 96, 0.25)"}
                         stroke={isFound ? "#50e3c2" : "#c23b60"}
                         strokeWidth="2"
                       />
                       {isFound && (
-                        <text x={mapX(tgt.x)} y={mapY(tgt.y) - 12} fill="#50e3c2" fontSize="11" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
+                        <text x={mapX(tgt.x)} y={mapY(tgt.y) - 12} fill="#50e3c2" fontSize="11" textAnchor="middle" fontFamily="JetBrains Mono, monospace" fontWeight="700">
                           {tgt.type} Sniped!
                         </text>
                       )}
@@ -729,7 +895,7 @@ export function SpeedTangentsArena({ MathFormula }) {
                 position: "absolute",
                 top: "10px",
                 right: "12px",
-                background: "rgba(10, 8, 12, 0.75)",
+                background: "rgba(10, 8, 12, 0.8)",
                 backdropFilter: "blur(4px)",
                 padding: "4px 8px",
                 borderRadius: "4px",
@@ -737,11 +903,11 @@ export function SpeedTangentsArena({ MathFormula }) {
                 color: "var(--text-dim)"
               }}
             >
-              Click anywhere on curve or drag slider
+              {gameMode === "extrema" ? "Click stationary extrema targets" : "Click curve or drag slider below"}
             </div>
           </div>
 
-          {/* Controls Bar & Real-Time Precision Meter */}
+          {/* Mode 1: MVT Slider & Real-Time Precision Meter */}
           {gameState === "playing" && gameMode === "mvt" && (
             <div style={{ marginTop: "18px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
@@ -788,8 +954,8 @@ export function SpeedTangentsArena({ MathFormula }) {
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
                 <div style={{ fontSize: "12px", color: "var(--text-dim)", display: "flex", gap: "16px" }}>
-                  <span>Secant Slope $m = {problem.secantSlope?.toFixed(2)}$</span>
-                  <span>Tangent Slope $f'(c) = {currentTangentSlope.toFixed(2)}$</span>
+                  <span>Secant Slope m = {problem.secantSlope?.toFixed(2)}</span>
+                  <span>Tangent Slope f'(c) = {currentTangentSlope.toFixed(2)}</span>
                 </div>
 
                 <button
@@ -808,7 +974,7 @@ export function SpeedTangentsArena({ MathFormula }) {
           {/* Mode 2: Extrema Sniper Target List */}
           {gameState === "playing" && gameMode === "extrema" && (
             <div style={{ marginTop: "18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 {(problem.targets || []).map((t, i) => (
                   <div
                     key={i}
@@ -834,6 +1000,69 @@ export function SpeedTangentsArena({ MathFormula }) {
               >
                 Finish Round
               </button>
+            </div>
+          )}
+
+          {/* Mode 3: Riemann Area Slider */}
+          {gameState === "playing" && gameMode === "riemann" && (
+            <div style={{ marginTop: "18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div>
+                  <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase" }}>
+                    ESTIMATED DEFINITE AREA:
+                  </span>
+                  <span style={{ marginLeft: "8px", color: "var(--accent-crimson)", fontFamily: "var(--font-mono)", fontWeight: "700" }}>
+                    Area ≈ {userGuess.toFixed(2)}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>Live Proximity:</span>
+                  <div
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      fontFamily: "var(--font-mono)",
+                      background: liveAccuracy >= 75 ? "rgba(80, 227, 194, 0.2)" : "rgba(194, 59, 96, 0.2)",
+                      color: liveAccuracy >= 75 ? "#50e3c2" : "var(--accent-crimson)",
+                      border: `1px solid ${liveAccuracy >= 75 ? "#50e3c2" : "var(--accent-crimson)"}`
+                    }}
+                  >
+                    {liveAccuracy}%
+                  </div>
+                </div>
+              </div>
+
+              <input
+                type="range"
+                min={0}
+                max={Math.max(Number((problem.trueArea * 2.2).toFixed(1)), 10)}
+                step="0.05"
+                value={userGuess}
+                onChange={(e) => {
+                  setUserGuess(Number(e.target.value));
+                  sounds.tick();
+                }}
+                style={{ width: "100%", accentColor: "var(--accent-crimson)", cursor: "pointer" }}
+              />
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+                  Interval [a, b] = [{problem.a}, {problem.b}]
+                </span>
+
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => submitGuess(false)}
+                  style={{ padding: "10px 24px", display: "inline-flex", alignItems: "center", gap: "8px" }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>Lock in Integral Area Guess</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -873,7 +1102,14 @@ export function SpeedTangentsArena({ MathFormula }) {
                   </span>
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--text-dim)", marginTop: "4px" }}>
-                  Accuracy: <b style={{ color: "#f5efe6" }}>{lastResult.accuracy}%</b> • Your Guess: <b>c = {lastResult.userGuess}</b> • True MVT: <b style={{ color: "#50e3c2" }}>c = {lastResult.trueVal}</b>
+                  Accuracy: <b style={{ color: "#f5efe6" }}>{lastResult.accuracy}%</b>
+                  {gameMode === "riemann" ? (
+                    <span> • Guessed Area: <b>{lastResult.userGuess}</b> • True Area: <b style={{ color: "#50e3c2" }}>{lastResult.trueVal}</b></span>
+                  ) : gameMode === "extrema" ? (
+                    <span> • Critical Points Discovered</span>
+                  ) : (
+                    <span> • Your Guess: <b>c = {lastResult.userGuess}</b> • True MVT: <b style={{ color: "#50e3c2" }}>c = {lastResult.trueVal}</b></span>
+                  )}
                 </div>
               </div>
 
@@ -915,7 +1151,7 @@ export function SpeedTangentsArena({ MathFormula }) {
             Calculus Arena Duel Completed!
           </h3>
           <p style={{ color: "var(--text-dim)", fontSize: "14px", marginBottom: "24px" }}>
-            Rank Achieved: <b style={{ color: score >= 4000 ? "#50e3c2" : score >= 2500 ? "var(--accent-amber)" : "var(--accent-crimson)" }}>
+            Rank Achieved: <b style={{ color: score >= 4200 ? "#50e3c2" : score >= 2800 ? "var(--accent-amber)" : "var(--accent-crimson)" }}>
               {score >= 4500 ? "🏆 Grandmaster of Analysis (S-Rank)" : score >= 3000 ? "⭐ Calculus Virtuoso (A-Rank)" : "🌱 Adept Apprentice (B-Rank)"}
             </b>
           </p>
@@ -929,21 +1165,23 @@ export function SpeedTangentsArena({ MathFormula }) {
               margin: "0 auto 28px"
             }}
           >
-            <div style={{ background: "rgba(255,255,255,0.04)", padding: "14px", borderRadius: "var(--radius-sm)" }}>
-              <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>FINAL SCORE</span>
-              <div style={{ fontSize: "20px", color: "#f5efe6", fontFamily: "var(--font-mono)", fontWeight: "700" }}>{score}</div>
+            <div className="panel" style={{ padding: "14px", textAlign: "center" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase" }}>TOTAL SCORE</span>
+              <strong style={{ display: "block", fontSize: "22px", color: "#50e3c2", marginTop: "4px" }}>
+                {score}
+              </strong>
             </div>
-
-            <div style={{ background: "rgba(255,255,255,0.04)", padding: "14px", borderRadius: "var(--radius-sm)" }}>
-              <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>MAX STREAK</span>
-              <div style={{ fontSize: "20px", color: "var(--accent-crimson)", fontFamily: "var(--font-mono)", fontWeight: "700" }}>
-                {maxStreak}x
-              </div>
+            <div className="panel" style={{ padding: "14px", textAlign: "center" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase" }}>MAX STREAK</span>
+              <strong style={{ display: "block", fontSize: "22px", color: "var(--accent-crimson)", marginTop: "4px" }}>
+                {maxStreak}
+              </strong>
             </div>
-
-            <div style={{ background: "rgba(255,255,255,0.04)", padding: "14px", borderRadius: "var(--radius-sm)" }}>
-              <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>HIGH SCORE</span>
-              <div style={{ fontSize: "20px", color: "var(--accent-amber)", fontFamily: "var(--font-mono)", fontWeight: "700" }}>{highScore}</div>
+            <div className="panel" style={{ padding: "14px", textAlign: "center" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase" }}>ROUNDS</span>
+              <strong style={{ display: "block", fontSize: "22px", color: "#f5efe6", marginTop: "4px" }}>
+                {totalRounds}/{totalRounds}
+              </strong>
             </div>
           </div>
 
@@ -951,10 +1189,10 @@ export function SpeedTangentsArena({ MathFormula }) {
             type="button"
             className="primary-button"
             onClick={() => startNewGame(gameMode)}
-            style={{ padding: "12px 30px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px" }}
+            style={{ padding: "12px 32px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "8px" }}
           >
             <RotateCcw size={16} />
-            <span>Play Again</span>
+            <span>Play Another 5-Round Duel</span>
           </button>
         </div>
       )}
