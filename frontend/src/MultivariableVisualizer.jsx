@@ -116,169 +116,181 @@ export function MultivariableVisualizer({ MathFormula }) {
     if (!mount) return;
     while (mount.firstChild) mount.removeChild(mount.firstChild);
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0a080c");
+    let renderer;
+    let reqId;
 
-    const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / mount.clientHeight, 0.1, 100);
-    camera.position.set(4.5, 4.2, 5.5);
+    try {
+      const width = Math.max(mount.clientWidth || 0, 320);
+      const height = Math.max(mount.clientHeight || 0, 460);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(mount.clientWidth, mount.clientHeight);
-    mount.appendChild(renderer.domElement);
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color("#0a080c");
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.target.set(0, 0, 0);
+      const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+      camera.position.set(4.5, 4.2, 5.5);
 
-    // Ambient and directional lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(5, 10, 7);
-    scene.add(dirLight);
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(width, height);
+      mount.appendChild(renderer.domElement);
 
-    const group = new THREE.Group();
-    scene.add(group);
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.target.set(0, 0, 0);
 
-    // 1. Generate 3D Surface Mesh
-    const segments = 45;
-    const range = surfaceDef.range;
-    const geometry = new THREE.PlaneGeometry(range * 2, range * 2, segments, segments);
-    const pos = geometry.attributes.position;
-    const colors = [];
+      // Ambient and directional lighting
+      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(5, 10, 7);
+      scene.add(dirLight);
 
-    for (let i = 0; i < pos.count; i++) {
-      const px = pos.getX(i);
-      const py = pos.getY(i);
-      const pz = surfaceDef.fn(px, py) * surfaceDef.zScale;
-      pos.setZ(i, pz);
+      const group = new THREE.Group();
+      scene.add(group);
 
-      // Height gradient color (Burgundy to Sage to Cream)
-      const normZ = (pz + 1.5) / 3.0;
-      const c = new THREE.Color();
-      if (normZ > 0.5) {
-        c.lerpColors(new THREE.Color("#8A9E8C"), new THREE.Color("#F5EFE6"), (normZ - 0.5) * 2);
-      } else {
-        c.lerpColors(new THREE.Color("#781D39"), new THREE.Color("#8A9E8C"), normZ * 2);
+      // 1. Generate 3D Surface Mesh
+      const segments = 45;
+      const range = surfaceDef.range;
+      const geometry = new THREE.PlaneGeometry(range * 2, range * 2, segments, segments);
+      const pos = geometry.attributes.position;
+      const colors = [];
+
+      for (let i = 0; i < pos.count; i++) {
+        const px = pos.getX(i);
+        const py = pos.getY(i);
+        const pz = surfaceDef.fn(px, py) * surfaceDef.zScale;
+        pos.setZ(i, pz);
+
+        // Height gradient color (Burgundy to Sage to Cream)
+        const normZ = (pz + 1.5) / 3.0;
+        const c = new THREE.Color();
+        if (normZ > 0.5) {
+          c.lerpColors(new THREE.Color("#8A9E8C"), new THREE.Color("#F5EFE6"), (normZ - 0.5) * 2);
+        } else {
+          c.lerpColors(new THREE.Color("#781D39"), new THREE.Color("#8A9E8C"), normZ * 2);
+        }
+        colors.push(c.r, c.g, c.b);
       }
-      colors.push(c.r, c.g, c.b);
-    }
 
-    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-    geometry.computeVertexNormals();
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      geometry.computeVertexNormals();
 
-    const surfaceMat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      side: THREE.DoubleSide,
-      roughness: 0.35,
-      metalness: 0.15,
-      wireframe: wireframe
-    });
-    const surfaceMesh = new THREE.Mesh(geometry, surfaceMat);
-    surfaceMesh.rotation.x = -Math.PI / 2; // Orient z upwards
-    group.add(surfaceMesh);
-
-    // Coordinate Grid at z=0 plane
-    const grid = new THREE.GridHelper(range * 2, 16, 0x8a9e8c, 0x221a24);
-    grid.position.y = -1.2;
-    group.add(grid);
-
-    // 2. Inspection point marker (x0, y0, z0)
-    // Note: in Three.js, y is UP, so x -> x, z -> y, y -> z
-    const pointPos = new THREE.Vector3(x0, z0 * surfaceDef.zScale, -y0);
-    const pointSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 24, 24),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xc23b60, emissiveIntensity: 2.0 })
-    );
-    pointSphere.position.copy(pointPos);
-    group.add(pointSphere);
-
-    // Drop line from surface to base
-    const dropLineGeo = new THREE.BufferGeometry().setFromPoints([
-      pointPos,
-      new THREE.Vector3(x0, -1.2, -y0)
-    ]);
-    const dropLineMat = new THREE.LineDashedMaterial({ color: 0x8a9e8c, dashSize: 0.08, gapSize: 0.04 });
-    const dropLine = new THREE.Line(dropLineGeo, dropLineMat);
-    dropLine.computeLineDistances();
-    group.add(dropLine);
-
-    // 3. Tangent Plane Mesh: z - z0 = fx*(x - x0) + fy*(y - y0)
-    if (showTangentPlane) {
-      const planeSpan = 0.9;
-      const planeSegments = 10;
-      const tPlaneGeo = new THREE.PlaneGeometry(planeSpan * 2, planeSpan * 2, planeSegments, planeSegments);
-      const tPos = tPlaneGeo.attributes.position;
-
-      for (let i = 0; i < tPos.count; i++) {
-        const u = tPos.getX(i);
-        const v = tPos.getY(i);
-        const curX = x0 + u;
-        const curY = y0 + v;
-        const curZ = (z0 + fx * u + fy * v) * surfaceDef.zScale;
-        tPos.setX(i, curX);
-        tPos.setY(i, curY);
-        tPos.setZ(i, curZ);
-      }
-      tPlaneGeo.computeVertexNormals();
-
-      const tPlaneMat = new THREE.MeshStandardMaterial({
-        color: 0xc23b60,
-        transparent: true,
-        opacity: 0.45,
-        side: THREE.DoubleSide
+      const surfaceMat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        roughness: 0.35,
+        metalness: 0.15,
+        wireframe: wireframe
       });
-      const tPlaneMesh = new THREE.Mesh(tPlaneGeo, tPlaneMat);
-      tPlaneMesh.rotation.x = -Math.PI / 2;
-      group.add(tPlaneMesh);
-    }
+      const surfaceMesh = new THREE.Mesh(geometry, surfaceMat);
+      surfaceMesh.rotation.x = -Math.PI / 2; // Orient z upwards
+      group.add(surfaceMesh);
 
-    // 4. Gradient Vector Arrow (∇f = <fx, fy>)
-    if (showGradient && gradMag > 0.001) {
-      const gradDir = new THREE.Vector3(fx, (fx * fx + fy * fy) * 0.15, -fy).normalize();
-      const arrowLength = Math.min(Math.max(gradMag * 0.45, 0.4), 1.6);
-      const arrowHelper = new THREE.ArrowHelper(gradDir, pointPos, arrowLength, 0x50e3c2, 0.22, 0.12);
-      group.add(arrowHelper);
-    }
+      // Coordinate Grid at z=0 plane
+      const grid = new THREE.GridHelper(range * 2, 16, 0x8a9e8c, 0x221a24);
+      grid.position.y = -1.2;
+      group.add(grid);
 
-    // 5. 2D/3D Vector Field Arrows
-    if (showVectorField) {
-      const step = 0.8;
-      for (let vx = -1.6; vx <= 1.6; vx += step) {
-        for (let vy = -1.6; vy <= 1.6; vy += step) {
-          const vfx = surfaceDef.dfdx(vx, vy);
-          const vfy = surfaceDef.dfdy(vx, vy);
-          const vlen = Math.sqrt(vfx * vfx + vfy * vfy) || 1e-4;
-          const vDir = new THREE.Vector3(vfx / vlen, 0, -vfy / vlen);
-          const vOrigin = new THREE.Vector3(vx, -1.18, -vy);
-          const vArrow = new THREE.ArrowHelper(vDir, vOrigin, 0.35, 0x8a9e8c, 0.08, 0.05);
-          group.add(vArrow);
+      // 2. Inspection point marker (x0, y0, z0)
+      const pointPos = new THREE.Vector3(x0, z0 * surfaceDef.zScale, -y0);
+      const pointSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 24, 24),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xc23b60, emissiveIntensity: 2.0 })
+      );
+      pointSphere.position.copy(pointPos);
+      group.add(pointSphere);
+
+      // Drop line from surface to base
+      const dropLineGeo = new THREE.BufferGeometry().setFromPoints([
+        pointPos,
+        new THREE.Vector3(x0, -1.2, -y0)
+      ]);
+      const dropLineMat = new THREE.LineDashedMaterial({ color: 0x8a9e8c, dashSize: 0.08, gapSize: 0.04 });
+      const dropLine = new THREE.Line(dropLineGeo, dropLineMat);
+      dropLine.computeLineDistances();
+      group.add(dropLine);
+
+      // 3. Tangent Plane Mesh: z - z0 = fx*(x - x0) + fy*(y - y0)
+      if (showTangentPlane) {
+        const planeSpan = 0.9;
+        const planeSegments = 10;
+        const tPlaneGeo = new THREE.PlaneGeometry(planeSpan * 2, planeSpan * 2, planeSegments, planeSegments);
+        const tPos = tPlaneGeo.attributes.position;
+
+        for (let i = 0; i < tPos.count; i++) {
+          const u = tPos.getX(i);
+          const v = tPos.getY(i);
+          const curX = x0 + u;
+          const curY = y0 + v;
+          const curZ = (z0 + fx * u + fy * v) * surfaceDef.zScale;
+          tPos.setX(i, curX);
+          tPos.setY(i, curY);
+          tPos.setZ(i, curZ);
+        }
+        tPlaneGeo.computeVertexNormals();
+
+        const tPlaneMat = new THREE.MeshStandardMaterial({
+          color: 0xc23b60,
+          transparent: true,
+          opacity: 0.45,
+          side: THREE.DoubleSide
+        });
+        const tPlaneMesh = new THREE.Mesh(tPlaneGeo, tPlaneMat);
+        tPlaneMesh.rotation.x = -Math.PI / 2;
+        group.add(tPlaneMesh);
+      }
+
+      // 4. Gradient Vector Arrow (∇f = <fx, fy>)
+      if (showGradient && gradMag > 0.001) {
+        const gradDir = new THREE.Vector3(fx, (fx * fx + fy * fy) * 0.15, -fy).normalize();
+        const arrowLength = Math.min(Math.max(gradMag * 0.45, 0.4), 1.6);
+        const arrowHelper = new THREE.ArrowHelper(gradDir, pointPos, arrowLength, 0x50e3c2, 0.22, 0.12);
+        group.add(arrowHelper);
+      }
+
+      // 5. 2D/3D Vector Field Arrows
+      if (showVectorField) {
+        const step = 0.8;
+        for (let vx = -1.6; vx <= 1.6; vx += step) {
+          for (let vy = -1.6; vy <= 1.6; vy += step) {
+            const vfx = surfaceDef.dfdx(vx, vy);
+            const vfy = surfaceDef.dfdy(vx, vy);
+            const vlen = Math.sqrt(vfx * vfx + vfy * vfy) || 1e-4;
+            const vDir = new THREE.Vector3(vfx / vlen, 0, -vfy / vlen);
+            const vOrigin = new THREE.Vector3(vx, -1.18, -vy);
+            const vArrow = new THREE.ArrowHelper(vDir, vOrigin, 0.35, 0x8a9e8c, 0.08, 0.05);
+            group.add(vArrow);
+          }
         }
       }
+
+      const animate = () => {
+        reqId = requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      const handleResize = () => {
+        if (!mount) return;
+        const newW = Math.max(mount.clientWidth || 0, 320);
+        const newH = Math.max(mount.clientHeight || 0, 460);
+        camera.aspect = newW / newH;
+        camera.updateProjectionMatrix();
+        renderer.setSize(newW, newH);
+      };
+      window.addEventListener("resize", handleResize);
+
+      return () => {
+        cancelAnimationFrame(reqId);
+        window.removeEventListener("resize", handleResize);
+        try {
+          renderer.dispose();
+        } catch (_) {}
+      };
+    } catch (err) {
+      console.error("Three.js setup error in MultivariableVisualizer:", err);
     }
-
-    let reqId;
-    const animate = () => {
-      reqId = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    const handleResize = () => {
-      if (!mount) return;
-      camera.aspect = mount.clientWidth / mount.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(mount.clientWidth, mount.clientHeight);
-    };
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      cancelAnimationFrame(reqId);
-      window.removeEventListener("resize", handleResize);
-      renderer.dispose();
-    };
   }, [surfaceDef, x0, y0, z0, fx, fy, gradMag, showTangentPlane, showGradient, showVectorField, wireframe]);
 
   return (

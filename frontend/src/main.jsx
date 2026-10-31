@@ -53,6 +53,8 @@ import { MultivariableVisualizer } from "./MultivariableVisualizer.jsx";
 import { ExportReportModal } from "./ExportReportModal.jsx";
 import { SpeedTangentsArena } from "./SpeedTangentsArena.jsx";
 import { clientEvaluateMVT } from "./clientMathEngine.js";
+import { ErrorBoundary } from "./ErrorBoundary.jsx";
+import { CURATED_PROBLEMS } from "./curatedProblems.js";
 
 
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
@@ -1780,7 +1782,7 @@ function ConvolutionVisualizer() {
 // ====================================================
 function PracticeSolver() {
   const [practiceTab, setPracticeTab] = useState("bank"); // "bank" | "arena"
-  const [problems, setProblems] = useState([]);
+  const [problems, setProblems] = useState(CURATED_PROBLEMS);
   const [loading, setLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [difficultyFilter, setDifficultyFilter] = useState("all");
@@ -1826,16 +1828,32 @@ function PracticeSolver() {
     const selectedIdx = selectedAnswers[problemId];
     if (selectedIdx === undefined) return;
     setVerifyingId(problemId);
+
+    const prob = problems.find(p => p.id === problemId);
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const response = await fetch(`${API}/practice/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problem_id: problemId, selected_index: selectedIdx })
+        body: JSON.stringify({ problem_id: problemId, selected_index: selectedIdx }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await response.json();
       setVerifications(prev => ({ ...prev, [problemId]: data }));
     } catch {
-      // handle error
+      // Instant Client-Side Verification Fallback
+      if (prob) {
+        const isCorrect = selectedIdx === prob.correct_index;
+        const localData = {
+          is_correct: isCorrect,
+          correct_index: prob.correct_index,
+          steps: prob.solution_steps || []
+        };
+        setVerifications(prev => ({ ...prev, [problemId]: localData }));
+      }
     } finally {
       setVerifyingId(null);
     }
@@ -1852,24 +1870,36 @@ function PracticeSolver() {
   return (
     <div className="practice-layout">
       {/* Tab Switcher: Problem Bank vs Speed Tangents Arena */}
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-        <button
-          type="button"
-          className={`filter-btn ${practiceTab === "bank" ? "active" : ""}`}
-          onClick={() => setPracticeTab("bank")}
-          style={{ padding: "8px 18px", fontSize: "13px" }}
-        >
-          Curated Problem Bank &amp; Step-by-Step Solver
-        </button>
-        <button
-          type="button"
-          className={`filter-btn ${practiceTab === "arena" ? "active" : ""}`}
-          onClick={() => setPracticeTab("arena")}
-          style={{ padding: "8px 18px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}
-        >
-          <Zap size={14} style={{ color: "var(--accent-crimson)" }} />
-          <span>Speed Tangents Challenge (Gamified Arena)</span>
-        </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            type="button"
+            className={`filter-btn ${practiceTab === "bank" ? "active" : ""}`}
+            onClick={() => setPracticeTab("bank")}
+            style={{ padding: "9px 18px", fontSize: "13px" }}
+          >
+            📚 Curated Problem Bank &amp; Step-by-Step Solver
+          </button>
+          <button
+            type="button"
+            className={`filter-btn ${practiceTab === "arena" ? "active" : ""}`}
+            onClick={() => setPracticeTab("arena")}
+            style={{ padding: "9px 18px", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}
+          >
+            <Zap size={14} style={{ color: "var(--accent-crimson)" }} />
+            <span>⚡ Calculus Arena: Speed Tangents &amp; Extrema Duel</span>
+          </button>
+        </div>
+
+        {/* Practice Stats Badge */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+            Problems Available: <b style={{ color: "#f5efe6", fontFamily: "var(--font-mono)" }}>{problems.length}</b>
+          </span>
+          <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
+            Verified: <b style={{ color: "#50e3c2", fontFamily: "var(--font-mono)" }}>{Object.keys(verifications).length}</b>
+          </span>
+        </div>
       </div>
 
       {practiceTab === "arena" ? (
@@ -4566,15 +4596,26 @@ function App() {
         <div className="app-content-body">
           {/* 0. Interactive Homepage */}
           {domainMode === "home" && (
-            <InteractiveHome onNavigate={navigateTo} apiStatus={apiStatus} />
+            <ErrorBoundary componentName="Interactive Overview">
+              <InteractiveHome onNavigate={navigateTo} apiStatus={apiStatus} />
+            </ErrorBoundary>
           )}
 
           {/* AI Intelligence Copilot & Personalized Math Analyzer */}
           {domainMode === "copilot" && (
-            <AICopilotView onNavigate={navigateTo} />
+            <ErrorBoundary componentName="AI Math Copilot">
+              <AICopilotView onNavigate={navigateTo} />
+            </ErrorBoundary>
           )}
 
-      {domainMode === "calculus" && (
+          {/* 11. MULTIVARIABLE 3D VECTOR CALCULUS MODULE */}
+          {domainMode === "calculus" && activePage === "multivariable" && (
+            <ErrorBoundary componentName="3D Vector Calculus">
+              <MultivariableVisualizer MathFormula={MathFormula} />
+            </ErrorBoundary>
+          )}
+
+      {domainMode === "calculus" && activePage !== "multivariable" && (
         <>
       {/* Hero Section with KaTeX Header Formula */}
       <section className="title-row">
@@ -4629,13 +4670,6 @@ function App() {
 
       {/* Universal Math Quick-Pad */}
       <MathKeypad onInsert={insertToken} />
-
-      {/* ======================================================== */}
-      {/* 11. MULTIVARIABLE 3D VECTOR CALCULUS MODULE              */}
-      {/* ======================================================== */}
-      {activePage === "multivariable" && (
-        <MultivariableVisualizer MathFormula={MathFormula} />
-      )}
 
       {/* ======================================================== */}
       {/* 1. MVT EXPLORER MODULE                                   */}
@@ -4701,12 +4735,14 @@ function App() {
                 <span className="drag-note">Drag to orbit · Scroll to zoom · Click curve to pin</span>
               </div>
 
-              <MVTScene
-                result={result}
-                inspectX={valueResult?.x}
-                inspectValue={valueResult?.value}
-                onInspectPoint={pinPoint}
-              />
+              <ErrorBoundary componentName="3D MVT Three.js Scene">
+                <MVTScene
+                  result={result}
+                  inspectX={valueResult?.x}
+                  inspectValue={valueResult?.value}
+                  onInspectPoint={pinPoint}
+                />
+              </ErrorBoundary>
 
               <div className="plot-foot">
                 <span>Interactive 3D WebGL render</span>
@@ -5450,10 +5486,12 @@ function App() {
             </div>
           </section>
 
-          {signalsTab === "explorer" && <SignalExplorer />}
-          {signalsTab === "convolution" && <ConvolutionVisualizer />}
-          {signalsTab === "lti" && <LTIAnalyzer />}
-          {signalsTab === "fourier" && <FourierLab />}
+          <ErrorBoundary componentName="Signals & Systems Lab">
+            {signalsTab === "explorer" && <SignalExplorer />}
+            {signalsTab === "convolution" && <ConvolutionVisualizer />}
+            {signalsTab === "lti" && <LTIAnalyzer />}
+            {signalsTab === "fourier" && <FourierLab />}
+          </ErrorBoundary>
         </>
       )}
 
@@ -5481,7 +5519,9 @@ function App() {
             </div>
           </section>
 
-          <PracticeSolver />
+          <ErrorBoundary componentName="Practice Arena & Solver">
+            <PracticeSolver />
+          </ErrorBoundary>
         </>
       )}
 

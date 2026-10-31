@@ -47,7 +47,7 @@ export function clientEvaluateMVT(expr, a, b) {
       const px = a + (i / 120) * (b - a);
       const py = f(px);
       if (Number.isFinite(py) && Math.abs(py) < 1e6) {
-        plot_points.append ? plot_points.append({ x: px, y: py }) : plot_points.push({ x: px, y: py });
+        plot_points.push({ x: px, y: py });
       }
     }
 

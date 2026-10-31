@@ -169,6 +169,10 @@ export function WebAudioDSP({ waveform, harmonics, fundamentalFreq, amplitude })
 
     try {
       setAudioError(null);
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setAudioError("Microphone access is not supported in this browser environment or requires an HTTPS secure origin.");
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
 
