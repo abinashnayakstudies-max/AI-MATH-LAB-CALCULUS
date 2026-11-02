@@ -58,6 +58,7 @@ import { SpeedTangentsArena } from "./SpeedTangentsArena.jsx";
 import { clientEvaluateMVT, clientCalculateRiemann, clientGenerateSignal, clientSolveCopilotQuery, RANDOM_SIGNAL_PRESETS } from "./clientMathEngine.js";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import { CURATED_PROBLEMS } from "./curatedProblems.js";
+import { Toaster, toast } from "./sonner.jsx";
 
 
 const API = (import.meta.env.VITE_API_BASE_URL || "https://ai-math-lab-backend.onrender.com").replace(/\/$/, "");
@@ -1370,6 +1371,7 @@ function SignalExplorer() {
       exprOverride: item.formula,
       domainOverride: item.domain
     });
+    toast.info("Waveform Loaded", { description: `${item.name}: ${item.formula}` });
   };
 
   return (
@@ -2023,6 +2025,11 @@ function PracticeSolver() {
       clearTimeout(timeoutId);
       const data = await response.json();
       setVerifications(prev => ({ ...prev, [problemId]: data }));
+      if (data?.is_correct) {
+        toast.success("Correct Answer Verified! (+100 XP)", { description: "Analytical proof steps unlocked." });
+      } else {
+        toast.error("Incorrect Choice", { description: "Inspect the pedagogical hint & step-by-step derivation." });
+      }
       if (data?.is_correct && !completedIds.includes(problemId)) {
         const next = [...completedIds, problemId];
         setCompletedIds(next);
@@ -4777,7 +4784,12 @@ function App() {
       clearTimeout(timeoutId);
       const data = await r.json();
       setResult(data);
-      if (data && !data.error) setApiStatus("online");
+      if (data && !data.error) {
+        setApiStatus("online");
+        if (data.canonical_c != null) {
+          toast.success("MVT Solved", { description: `Verified c = ${safeNum(data.canonical_c, 5)} on [${a}, ${b}].` });
+        }
+      }
     } catch {
       const fallbackResult = clientEvaluateMVT(expression, Number(a), Number(b));
       if (fallbackResult) {
@@ -4806,6 +4818,9 @@ function App() {
       });
       const data = await response.json();
       setCalculusResult(data);
+      if (data && !data.error) {
+        toast.success("Calculus Computed", { description: `Derived exact expressions for ${calculusExpression}.` });
+      }
     } catch {
       setCalculusResult({ error: "Calculus service connection error." });
     } finally {
@@ -4828,6 +4843,9 @@ function App() {
       });
       const data = await response.json();
       setTaylorResult(data);
+      if (data && !data.error) {
+        toast.success("Taylor Series Generated", { description: `Order ${taylorOrder} polynomial expansion centered at a=${taylorPoint}.` });
+      }
     } catch {
       setTaylorResult({ error: "Taylor expansion service connection error." });
     } finally {
@@ -4858,6 +4876,9 @@ function App() {
         const data = await response.json();
         setRiemannResult(data);
         setRiemannLoading(false);
+        if (data && !data.error) {
+          toast.success("Riemann Sum Calculated", { description: `${riemannN} partitions using ${riemannMethod} rule.` });
+        }
         return;
       }
     } catch {
@@ -4895,6 +4916,9 @@ function App() {
       });
       const data = await response.json();
       setLimitResult(data);
+      if (data && !data.error) {
+        toast.success("Limit Computed", { description: `Approaching x → ${limitPoint} (${limitOperation}).` });
+      }
     } catch {
       setLimitResult({ error: "Limits calculation connection error." });
     } finally {
@@ -4915,6 +4939,9 @@ function App() {
       });
       const data = await response.json();
       setCriticalResult(data);
+      if (data && !data.error) {
+        toast.success("Extrema Analyzed", { description: `Found ${data.critical_points?.length || 0} critical points on [${criticalA}, ${criticalB}].` });
+      }
     } catch {
       setCriticalResult({ error: "Critical points service connection error." });
     } finally {
@@ -5949,6 +5976,7 @@ function App() {
         <FloatingAICopilot onNavigate={navigateTo} />
 
         {/* Academic Lab Report & Jupyter Exporter Modal */}
+        <Toaster position="bottom-right" richColors />
         <ExportReportModal
           isOpen={exportModalOpen}
           onClose={() => setExportModalOpen(false)}

@@ -675,9 +675,9 @@ export function clientSolveCopilotQuery(message, persona = "ada", level = "under
       `You can immediately explore and test closed-form formulas, plot curves, and examine interactive simulations across our laboratories below!`;
 
     steps = [
-      { title: "Analytical Modeling", latex: "y = f(x) \quad \text{or} \quad x(t) \in L^2(\mathbb{R})", notes: "Formalize mathematical hypotheses in appropriate function space." },
+      { title: "Analytical Modeling", latex: "y = f(x) \\quad \\text{or} \\quad x(t) \\in L^2(\\mathbb{R})", notes: "Formalize mathematical hypotheses in appropriate function space." },
       { title: "Infinitesimal Calculus Evaluation", latex: "f'(x) = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}", notes: "Examine continuity, differentiability, and critical stationary points." },
-      { title: "Integral & Spectral Synthesis", latex: "F(\omega) = \int_{-\infty}^\infty f(t) e^{-j\omega t}\,dt", notes: "Analyze harmonic components and frequency conservation." }
+      { title: "Integral & Spectral Synthesis", latex: "F(\\omega) = \\int_{-\\infty}^\\infty f(t) e^{-j\\omega t}\\,dt", notes: "Analyze harmonic components and frequency conservation." }
     ];
     actions = [
       { label: "Symbolic Calculus Engine", domain: "calculus", page: "calculus" },

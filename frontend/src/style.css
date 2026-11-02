@@ -4084,3 +4084,46 @@ footer {
   color: #f5efe6;
   border-color: rgba(194, 59, 96, 0.4);
 }
+
+
+/* ======================================================== */
+/* 24. IMPECCABLE DESIGN SYSTEM & TASTE-SKILL REFINEMENTS   */
+/* (pbakaus/impeccable + leonxlnx/taste-skill + sonner)      */
+/* ======================================================== */
+
+/* Strict 44px ergonomic touch targets */
+.primary-button,
+.secondary-button,
+.calculus-run,
+.finder-form button,
+.calculus-controls input,
+.calculus-controls select,
+.function-input {
+  min-height: 44px;
+}
+
+/* Tactile feedback on click/touch */
+button:active,
+.primary-button:active,
+.secondary-button:active,
+.sidebar-nav-item:active,
+.bento-card:active {
+  transform: scale(0.98);
+  transition: transform 0.08s ease;
+}
+
+/* Accessible focus ring indicators */
+:focus-visible {
+  outline: 2px solid var(--accent-crimson);
+  outline-offset: 2px;
+}
+
+/* Reading comfort: Bound line lengths to 75 characters */
+.title-row p,
+.calculus-heading p,
+.panel-title p,
+.rich-math-content p,
+.card-desc,
+.chat-bubble-content p {
+  max-width: 75ch;
+}

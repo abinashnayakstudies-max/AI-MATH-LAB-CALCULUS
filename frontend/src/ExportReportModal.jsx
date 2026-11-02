@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Download, Printer, FileText, Code2, X, Check, Copy } from "lucide-react";
+import { toast } from "./sonner.jsx";
 
 /**
  * ExportReportModal Component
@@ -131,6 +132,9 @@ export function ExportReportModal({ isOpen, onClose, activeModule, currentFormul
     navigator.clipboard.writeText(generateJupyterNotebook());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    toast.success("Jupyter Notebook Copied!", {
+      description: "Python / SymPy code ready to paste into any .ipynb."
+    });
   };
 
   return (
