@@ -113,17 +113,18 @@ button, input, select {
 
 /* Cloud Wake Banner */
 .cloud-wake-banner {
-  background: linear-gradient(90deg, rgba(194, 59, 96, 0.12), rgba(120, 29, 57, 0.04));
+  background: linear-gradient(90deg, rgba(194, 59, 96, 0.16), rgba(120, 29, 57, 0.08));
   border: 1px solid rgba(194, 59, 96, 0.35);
   border-radius: var(--radius-md);
   padding: 10px 18px;
-  margin-bottom: 20px;
+  margin: 14px 28px 0;
   display: flex;
   align-items: center;
   gap: 12px;
   font-size: 13px;
   color: #f5efe6;
   backdrop-filter: blur(12px);
+  flex-shrink: 0;
 }
 
 .banner-icon-pulse {
@@ -2046,6 +2047,7 @@ footer {
   width: 100%;
   position: relative;
   background-color: var(--bg-canvas);
+  overflow-x: hidden;
   color: var(--text-main);
 }
 

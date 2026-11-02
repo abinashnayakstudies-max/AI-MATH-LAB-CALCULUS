@@ -55,7 +55,7 @@ import { WebAudioDSP } from "./WebAudioDSP.jsx";
 import { MultivariableVisualizer } from "./MultivariableVisualizer.jsx";
 import { ExportReportModal } from "./ExportReportModal.jsx";
 import { SpeedTangentsArena } from "./SpeedTangentsArena.jsx";
-import { clientEvaluateMVT } from "./clientMathEngine.js";
+import { clientEvaluateMVT, clientCalculateRiemann } from "./clientMathEngine.js";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import { CURATED_PROBLEMS } from "./curatedProblems.js";
 
@@ -4732,6 +4732,8 @@ function App() {
     if (!riemannExpression.trim() || Number(riemannA) >= Number(riemannB)) return;
     setRiemannLoading(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
       const response = await fetch(`${API}/riemann-sum`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4741,15 +4743,33 @@ function App() {
           b: Number(riemannB),
           n: Number(riemannN),
           method: riemannMethod
-        })
+        }),
+        signal: controller.signal
       });
-      const data = await response.json();
-      setRiemannResult(data);
+      clearTimeout(timeoutId);
+      if (response.ok) {
+        const data = await response.json();
+        setRiemannResult(data);
+        setRiemannLoading(false);
+        return;
+      }
     } catch {
-      setRiemannResult({ error: "Riemann sum service connection error." });
-    } finally {
-      setRiemannLoading(false);
+      // Fallback seamlessly to instant in-browser computation
     }
+
+    const fallback = clientCalculateRiemann(
+      riemannExpression,
+      riemannA,
+      riemannB,
+      riemannN,
+      riemannMethod
+    );
+    if (fallback) {
+      setRiemannResult(fallback);
+    } else {
+      setRiemannResult({ error: "Unable to evaluate Riemann sum with current bounds." });
+    }
+    setRiemannLoading(false);
   }, [riemannExpression, riemannA, riemannB, riemannN, riemannMethod]);
 
   const calculateLimit = useCallback(async () => {
@@ -4843,14 +4863,7 @@ function App() {
       <div className="ambient-glow ambient-glow-two" aria-hidden="true" />
       <div className="background-grid" aria-hidden="true" />
 
-      {apiStatus === "sleeping" && (
-        <div className="cloud-wake-banner">
-          <Zap size={14} className="banner-icon-pulse" />
-          <span>
-            <strong>Cloud Instance Waking:</strong> Free tier Render instances sleep after inactivity and take ~30–45s to wake. Requests will succeed once online.
-          </span>
-        </div>
-      )}
+
 
       {/* Modern Collapsible Left Sidebar */}
       <AppSidebar
@@ -4877,6 +4890,15 @@ function App() {
           onOpenMobile={() => setMobileMenuOpen(true)}
           onNavigate={navigateTo}
         />
+
+        {apiStatus === "sleeping" && (
+          <div className="cloud-wake-banner">
+            <Zap size={14} className="banner-icon-pulse" />
+            <span>
+              <strong>Cloud Instance Waking:</strong> Free tier Render instance is waking up (~30–45s). In-browser solvers and client-side models are actively computing.
+            </span>
+          </div>
+        )}
 
         <div className="app-content-body">
           {/* 0. Interactive Homepage */}

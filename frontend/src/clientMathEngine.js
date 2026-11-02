@@ -64,6 +64,81 @@ export function clientEvaluateMVT(expr, a, b) {
   }
 }
 
+export function clientCalculateRiemann(expr, a, b, n = 8, method = "midpoint") {
+  const f = compileMathFunction(expr);
+  if (!f) return null;
+  try {
+    const numA = Number(a);
+    const numB = Number(b);
+    const numN = Math.max(Number(n) || 8, 1);
+    const dx = (numB - numA) / numN;
+    let sum = 0;
+    const rectangles = [];
+
+    for (let i = 0; i < numN; i++) {
+      const x_left = numA + i * dx;
+      const x_right = numA + (i + 1) * dx;
+      let sampleX;
+      if (method === "left") sampleX = x_left;
+      else if (method === "right") sampleX = x_right;
+      else sampleX = (x_left + x_right) / 2; // midpoint
+
+      let height = f(sampleX);
+      if (method === "trapezoid") {
+        height = ((f(x_left) || 0) + (f(x_right) || 0)) / 2;
+      }
+      if (!Number.isFinite(height)) height = 0;
+      sum += height * dx;
+
+      rectangles.push({
+        x_left,
+        x_right,
+        height,
+        sample_x: sampleX
+      });
+    }
+
+    // Generate smooth curve points
+    const plot_points = [];
+    const steps = 120;
+    const margin = Math.max((numB - numA) * 0.15, 0.5);
+    const plotA = numA - margin;
+    const plotB = numB + margin;
+    for (let i = 0; i <= steps; i++) {
+      const x = plotA + (i / steps) * (plotB - plotA);
+      const y = f(x);
+      if (Number.isFinite(y) && Math.abs(y) < 1e6) {
+        plot_points.push({ x, y });
+      }
+    }
+
+    // Numerical integration (Simpson's rule) for exact reference comparison
+    const simpsonN = 600;
+    const sdx = (numB - numA) / simpsonN;
+    let simpSum = (f(numA) || 0) + (f(numB) || 0);
+    for (let i = 1; i < simpsonN; i++) {
+      const x = numA + i * sdx;
+      const val = f(x) || 0;
+      simpSum += (i % 2 === 0 ? 2 : 4) * val;
+    }
+    const exact = (sdx / 3) * simpSum;
+
+    return {
+      riemann_sum: Number(sum.toFixed(5)),
+      exact_integral: Number(exact.toFixed(5)),
+      error: Number(Math.abs(sum - exact).toFixed(5)),
+      dx: Number(dx.toFixed(4)),
+      n: numN,
+      method,
+      rectangles,
+      plot_points,
+      is_client_fallback: true
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function compileMathFunction(exprStr) {
   if (!exprStr) return null;
   try {
