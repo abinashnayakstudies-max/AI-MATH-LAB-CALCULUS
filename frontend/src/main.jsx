@@ -55,9 +55,9 @@ import { WebAudioDSP } from "./WebAudioDSP.jsx";
 import { MultivariableVisualizer } from "./MultivariableVisualizer.jsx";
 import { ExportReportModal } from "./ExportReportModal.jsx";
 import { SpeedTangentsArena } from "./SpeedTangentsArena.jsx";
-import { clientEvaluateMVT, clientCalculateRiemann, clientGenerateSignal, clientSolveCopilotQuery, RANDOM_SIGNAL_PRESETS } from "./clientMathEngine.js";
+import { clientEvaluateMVT, clientCalculateRiemann, clientGenerateSignal, clientSolveCopilotQuery, clientCalculateFourier, clientAnalyzeLTI, RANDOM_SIGNAL_PRESETS } from "./clientMathEngine.js";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
-import { CURATED_PROBLEMS } from "./curatedProblems.js";
+import { CURATED_PROBLEMS, generateDynamicProblem } from "./curatedProblems.js";
 import { Toaster, toast } from "./sonner.jsx";
 
 
@@ -1243,6 +1243,51 @@ function ConvTrackSvg({ points, domain, strokeColor, fillColor, showArea = false
 // ====================================================
 function SignalExplorer() {
   const [signalType, setSignalType] = useState("sine");
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioCtxRef = useRef(null);
+  const audioOscRef = useRef(null);
+
+  const toggleSignalAudio = () => {
+    if (isPlayingAudio) {
+      if (audioOscRef.current) {
+        try { audioOscRef.current.stop(); } catch (_) {}
+        audioOscRef.current = null;
+      }
+      setIsPlayingAudio(false);
+      toast.info("Audio Synthesis Muted");
+      return;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      if (signalType === "sine" || signalType === "cosine") osc.type = "sine";
+      else if (signalType === "step" || signalType === "rect") osc.type = "square";
+      else if (signalType === "ramp") osc.type = "sawtooth";
+      else osc.type = "triangle";
+
+      const pitchFreq = Math.min(Math.max((Number(frequency) || 2) * 110, 110), 880);
+      osc.frequency.setValueAtTime(pitchFreq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      audioOscRef.current = osc;
+      setIsPlayingAudio(true);
+      toast.success("Synthesizing Signal Audio", {
+        description: `Playing ${signalType} tone at ${pitchFreq.toFixed(0)} Hz.`
+      });
+    } catch (_) {
+      toast.error("Web Audio Synthesis Unavailable");
+    }
+  };
   const [customExpression, setCustomExpression] = useState("sin(3*t) * exp(-0.35*abs(t))");
   const [domain, setDomain] = useState("continuous");
   const [timeStart, setTimeStart] = useState("-5");
@@ -1386,17 +1431,17 @@ function SignalExplorer() {
           </div>
         </div>
 
-        {/* Quick Action Buttons: Random Signal & Oscilloscope Animation */}
-        <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
+        {/* Quick Action Buttons: Random Signal, Oscilloscope Animation & Audio Synthesis */}
+        <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
           <button
             type="button"
             className="primary-button random-btn"
             onClick={pickRandomSignal}
             title="Pick a random function from our 20+ preset library"
-            style={{ flex: 1, padding: "8px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+            style={{ flex: 1, padding: "8px 10px", fontSize: "11px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
           >
-            <Sparkles size={14} />
-            <span>🎲 Random Signal</span>
+            <Sparkles size={13} />
+            <span>🎲 Random</span>
           </button>
 
           <button
@@ -1404,10 +1449,31 @@ function SignalExplorer() {
             className={`primary-button anim-toggle-btn ${isAnimating ? "active" : ""}`}
             onClick={() => setIsAnimating(!isAnimating)}
             title="Toggle live traveling waveform oscillation"
-            style={{ padding: "8px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+            style={{ padding: "8px 10px", fontSize: "11px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
           >
-            {isAnimating ? <Pause size={14} /> : <Play size={14} />}
+            {isAnimating ? <Pause size={13} /> : <Play size={13} />}
             <span>{isAnimating ? "Pause" : "Animate"}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`primary-button ${isPlayingAudio ? "active" : ""}`}
+            onClick={toggleSignalAudio}
+            title="Listen to the continuous audio tone synthesized via Web Audio API"
+            style={{
+              padding: "8px 10px",
+              fontSize: "11px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "4px",
+              background: isPlayingAudio ? "rgba(80, 227, 194, 0.3)" : "rgba(255, 255, 255, 0.05)",
+              borderColor: isPlayingAudio ? "#50e3c2" : "var(--border-subtle)",
+              color: isPlayingAudio ? "#50e3c2" : "#f5efe6"
+            }}
+          >
+            {isPlayingAudio ? <VolumeX size={13} /> : <Volume2 size={13} />}
+            <span>{isPlayingAudio ? "Mute" : "Listen"}</span>
           </button>
         </div>
 
@@ -1616,6 +1682,21 @@ function SignalExplorer() {
         <button className="primary-button calculus-run" onClick={() => generateSignal()} disabled={signalLoading}>
           <Play size={15} />
           {signalLoading ? "Rendering Waveform…" : "Generate & Transform"}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={toggleFourierAudio}
+          style={{
+            marginTop: "8px",
+            width: "100%",
+            borderColor: isPlayingAudio ? "var(--accent)" : undefined,
+            color: isPlayingAudio ? "var(--accent)" : undefined
+          }}
+        >
+          <Volume2 size={15} />
+          <span>{isPlayingAudio ? "⏹ Stop Sound" : "🔊 Listen to Waveform (Web Audio)"}</span>
         </button>
       </aside>
 
@@ -2074,9 +2155,9 @@ function PracticeSolver() {
 
   return (
     <div className="practice-layout">
-      {/* Tab Switcher: Problem Bank vs Speed Tangents Arena */}
+      {/* Tab Switcher: Problem Bank vs Speed Tangents Arena & Infinite Generator */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "20px" }}>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
           <button
             type="button"
             className={`filter-btn ${practiceTab === "bank" ? "active" : ""}`}
@@ -2093,6 +2174,32 @@ function PracticeSolver() {
           >
             <Zap size={14} style={{ color: "var(--accent-crimson)" }} />
             <span>⚡ Calculus Arena: Speed Tangents &amp; Extrema Duel</span>
+          </button>
+
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              const dyn = generateDynamicProblem();
+              setProblems(prev => [dyn, ...prev]);
+              toast.success("Fresh Procedural Problem Generated!", {
+                description: `${dyn.topic} (${dyn.difficulty}): Added to the top of your list.`
+              });
+            }}
+            title="Generate an infinite, never-before-seen math challenge with randomized coefficients"
+            style={{
+              padding: "9px 16px",
+              fontSize: "12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "linear-gradient(135deg, rgba(80, 227, 194, 0.22), rgba(120, 29, 57, 0.35))",
+              border: "1px solid #50e3c2",
+              color: "#50e3c2"
+            }}
+          >
+            <Sparkles size={14} />
+            <span>🎲 Generate Fresh Problem</span>
           </button>
         </div>
 
@@ -2516,16 +2623,22 @@ function LTIAnalyzer() {
 
   const fetchLti = useCallback(async (sysId, dom) => {
     setLoading(true);
+    const local = clientAnalyzeLTI(sysId, dom);
+    if (local) setData(local);
     try {
       const res = await fetch(`${API}/signals/lti`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ system_id: sysId, domain: dom })
       });
-      const d = await res.json();
-      setData(d);
+      if (res.ok) {
+        const d = await res.json();
+        setData(d);
+      }
     } catch {
-      setData({ error: "LTI Analyzer service connection error." });
+      if (!local) {
+        setData({ error: "LTI Analyzer service connection error." });
+      }
     } finally {
       setLoading(false);
     }
@@ -2816,8 +2929,85 @@ function FourierLab() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioCtxRef = useRef(null);
+
+  const toggleFourierAudio = useCallback(() => {
+    try {
+      if (isPlayingAudio && audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+        setIsPlayingAudio(false);
+        toast.info("Fourier audio synthesis stopped");
+        return;
+      }
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) {
+        toast.error("Web Audio API not supported in this browser");
+        return;
+      }
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const baseFreq = 220; // 220Hz A3 note for audible acoustic demonstration
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.15, ctx.currentTime);
+      masterGain.connect(ctx.destination);
+
+      // Add harmonic oscillators based on current waveform and harmonics
+      const nHarm = Math.max(1, Math.min(25, Number(harmonics) || 5));
+      if (waveform === "square") {
+        for (let k = 1; k <= 2 * nHarm - 1; k += 2) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.setValueAtTime(baseFreq * k, ctx.currentTime);
+          const ampK = (4 / (Math.PI * k));
+          gain.gain.setValueAtTime(ampK * 0.5, ctx.currentTime);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start();
+        }
+      } else if (waveform === "sawtooth") {
+        for (let n = 1; n <= nHarm; n++) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.setValueAtTime(baseFreq * n, ctx.currentTime);
+          const ampN = (2 / (Math.PI * n));
+          gain.gain.setValueAtTime(ampN * 0.4, ctx.currentTime);
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start();
+        }
+      } else {
+        // Pure / Triangle
+        const osc = ctx.createOscillator();
+        osc.type = waveform === "triangle" ? "triangle" : "sine";
+        osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
+        osc.connect(masterGain);
+        osc.start();
+      }
+
+      setIsPlayingAudio(true);
+      toast.success(`Playing ${waveform} wave with ${harmonics} Fourier harmonics at 220Hz!`);
+    } catch (err) {
+      toast.error("Audio initialization failed: " + err.message);
+      setIsPlayingAudio(false);
+    }
+  }, [isPlayingAudio, waveform, harmonics]);
+
+  // Clean up audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current) {
+        try { audioCtxRef.current.close(); } catch {}
+      }
+    };
+  }, []);
+
   const calculateFourier = useCallback(async (wf, nHarm, f0, amp) => {
     setLoading(true);
+    const local = clientCalculateFourier(wf, nHarm, f0, amp);
+    if (local) setData(local);
+
     try {
       const res = await fetch(`${API}/signals/fourier`, {
         method: "POST",
@@ -2829,10 +3019,14 @@ function FourierLab() {
           amplitude: Number(amp)
         })
       });
-      const d = await res.json();
-      setData(d);
+      if (res.ok) {
+        const d = await res.json();
+        setData(d);
+      }
     } catch {
-      setData({ error: "Fourier analysis service connection error." });
+      if (!local) {
+        setData({ error: "Fourier analysis service connection error." });
+      }
     } finally {
       setLoading(false);
     }
@@ -4643,10 +4837,14 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navigateTo = (domain, sub = null) => {
+  const navigateTo = (domain, sub = null, formula = null) => {
     setDomainMode(domain);
     if (domain === "calculus" && sub) setActivePage(sub);
     if (domain === "signals" && sub) setSignalsTab(sub);
+    if (formula && typeof setExpression === "function") {
+      setExpression(formula);
+      toast.info(`Pre-loaded formula: ${formula}`);
+    }
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };

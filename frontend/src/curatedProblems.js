@@ -354,3 +354,285 @@ export const CURATED_PROBLEMS = [
     ]
   }
 ];
+
+
+// ====================================================
+// PROCEDURAL PROBLEM GENERATOR ENGINE (INFINITE PRACTICE)
+// Generates endless unique mathematical challenge problems
+// with randomized coefficients, step-by-step KaTeX solutions,
+// and realistic student distractors.
+// ====================================================
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randChoice(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+export function generateDynamicProblem(seed = Date.now()) {
+  const templates = [
+    // 1. Random Polynomial Derivative
+    () => {
+      const a = randInt(2, 6);
+      const b = randInt(2, 7);
+      const c = randInt(1, 9);
+      const n = randInt(3, 5);
+      const correct = `${a * n}x^{${n - 1}} - ${2 * b}x + ${c}`;
+      const wrong1 = `${a * n}x^{${n}} - ${b}x + ${c}`;
+      const wrong2 = `${a * (n - 1)}x^{${n - 1}} - ${2 * b}x`;
+      const wrong3 = `${a * n}x^{${n - 1}} - ${2 * b}x`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "calculus",
+        topic: "Polynomial Differentiation",
+        difficulty: "Fundamentals",
+        is_dynamic: true,
+        question: `Find the exact derivative $\\frac{d}{dx} \\left[ ${a}x^{${n}} - ${b}x^2 + ${c}x - ${randInt(3, 12)} \\right]$.`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `Apply the power rule $\\frac{d}{dx}[x^n] = n x^{n-1}$ term-by-term.`,
+        solution_steps: [
+          {
+            title: "Differentiate Leading Monomial",
+            content: `$\\frac{d}{dx}[${a}x^{${n}}] = ${a} \\cdot ${n}x^{${n - 1}} = ${a * n}x^{${n - 1}}$.`
+          },
+          {
+            title: "Differentiate Lower Terms",
+            content: `$\\frac{d}{dx}[-${b}x^2 + ${c}x] = -${2 * b}x + ${c}$. The constant term differentiates to 0.`
+          },
+          {
+            title: "Sum Resulting Derivatives",
+            content: `$\\frac{df}{dx} = ${correct}$.`
+          }
+        ]
+      };
+    },
+
+    // 2. Random Definite Integral Area
+    () => {
+      const a = randInt(2, 6);
+      const b = randInt(1, 4);
+      const upper = randInt(2, 4);
+      // Integral of a*x + b from 0 to upper = a*upper^2/2 + b*upper
+      const val = (a * upper * upper) / 2 + b * upper;
+      const correct = `${val}`;
+      const wrong1 = `${val + randInt(2, 6)}`;
+      const wrong2 = `${Math.max(val - randInt(2, 5), 1)}`;
+      const wrong3 = `${val * 2}`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "calculus",
+        topic: "Definite Integration",
+        difficulty: "Standard",
+        is_dynamic: true,
+        question: `Evaluate the definite integral $\\int_0^{${upper}} (${a}x + ${b})\\,dx$.`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `Find the antiderivative $F(x) = \\frac{${a}}{2}x^2 + ${b}x$, then compute $F(${upper}) - F(0)$.`,
+        solution_steps: [
+          {
+            title: "Find Indefinite Antiderivative",
+            content: `$F(x) = \\int (${a}x + ${b})\\,dx = \\frac{${a}}{2}x^2 + ${b}x$.`
+          },
+          {
+            title: "Evaluate at Upper Bound",
+            content: `$F(${upper}) = \\frac{${a}}{2}(${upper})^2 + ${b}(${upper}) = ${val}$.`
+          },
+          {
+            title: "Subtract Lower Bound",
+            content: `$F(0) = 0 \\implies \\int_0^{${upper}} f(x)\\,dx = ${val} - 0 = ${correct}$.`
+          }
+        ]
+      };
+    },
+
+    // 3. Random Indeterminate Limit (L'Hopital / Trig)
+    () => {
+      const k = randInt(2, 7);
+      const m = randInt(1, 5);
+      const correct = `\\frac{${k}}{${m}}`;
+      const wrong1 = `\\frac{${m}}{${k}}`;
+      const wrong2 = `${k * m}`;
+      const wrong3 = `0`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "calculus",
+        topic: "Asymptotic Limits & L'Hopital",
+        difficulty: "Standard",
+        is_dynamic: true,
+        question: `Evaluate the limit $\\lim_{x \\to 0} \\frac{\\sin(${k}x)}{${m}x}$.`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `Direct substitution yields $\\frac{0}{0}$. Use the fundamental limit $\\lim_{u \\to 0}\\frac{\\sin(u)}{u} = 1$ or L'Hopital's Rule.`,
+        solution_steps: [
+          {
+            title: "Check Indeterminate Form",
+            content: `$\\frac{\\sin(${k} \\cdot 0)}{${m} \\cdot 0} = \\frac{0}{0}$ (Indeterminate form).`
+          },
+          {
+            title: "Apply L'Hopital's Rule",
+            content: `Differentiate numerator and denominator: $\\frac{d}{dx}[\\sin(${k}x)] = ${k}\\cos(${k}x)$, and $\\frac{d}{dx}[${m}x] = ${m}$.`
+          },
+          {
+            title: "Evaluate Limit",
+            content: `$\\lim_{x \\to 0} \\frac{${k}\\cos(${k}x)}{${m}} = \\frac{${k}(1)}{${m}} = ${correct}$.`
+          }
+        ]
+      };
+    },
+
+    // 4. Mean Value Theorem c-Value
+    () => {
+      const k = randInt(2, 5);
+      const b = randInt(2, 4);
+      // f(x) = x^2 + k*x on [0, b]. Secant slope = (b^2 + k*b - 0)/b = b + k
+      // f'(c) = 2c + k = b + k => 2c = b => c = b/2
+      const cVal = (b / 2).toFixed(1);
+      const correct = `c = ${cVal}`;
+      const wrong1 = `c = ${(b / 3).toFixed(1)}`;
+      const wrong2 = `c = ${(b * 0.75).toFixed(1)}`;
+      const wrong3 = `c = ${(b * 0.4).toFixed(1)}`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "calculus",
+        topic: "Mean Value Theorem",
+        difficulty: "Standard",
+        is_dynamic: true,
+        question: `For $f(x) = x^2 + ${k}x$ on the closed interval $[0, ${b}]$, find the exact value of $c \\in (0, ${b})$ satisfying $f'(c) = \\frac{f(${b}) - f(0)}{${b} - 0}$.`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `Calculate the secant slope $m_{sec} = \\frac{f(${b}) - f(0)}{${b}}$, equate to $f'(c) = 2c + ${k}$, and solve for $c$.`,
+        solution_steps: [
+          {
+            title: "Calculate Secant Slope",
+            content: `$f(${b}) = (${b})^2 + ${k}(${b}) = ${b * b + k * b}$. Secant slope $m = \\frac{${b * b + k * b} - 0}{${b}} = ${b + k}$.`
+          },
+          {
+            title: "Compute First Derivative",
+            content: `$f'(x) = 2x + ${k} \\implies f'(c) = 2c + ${k}$.`
+          },
+          {
+            title: "Solve for Mean Value c",
+            content: `$2c + ${k} = ${b + k} \\implies 2c = ${b} \\implies c = ${cVal} \\in (0, ${b})$.`
+          }
+        ]
+      };
+    },
+
+    // 5. Signals Time Shift & Energy
+    () => {
+      const shift = randInt(1, 6);
+      const width = randInt(2, 5);
+      const amp = randInt(2, 4);
+      // Rectangular pulse x(t) = A rect((t - shift)/width) has energy = A^2 * width
+      const energy = amp * amp * width;
+      const correct = `E_x = ${energy} \\text{ J}`;
+      const wrong1 = `E_x = ${energy * 2} \\text{ J}`;
+      const wrong2 = `E_x = ${amp * width} \\text{ J}`;
+      const wrong3 = `E_x = ${energy + randInt(3, 8)} \\text{ J}`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "signals",
+        topic: "Signal Energy & Transformations",
+        difficulty: "Fundamentals",
+        is_dynamic: true,
+        question: `Calculate the total signal energy $E_x = \\int_{-\\infty}^{\\infty} |x(t)|^2 dt$ for a rectangular pulse $x(t) = ${amp} \\cdot \\text{rect}\\left(\\frac{t - ${shift}}{${width}}\\right)$.`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `Recall that time-shifting does not alter signal energy: $E_x = \\int A^2 dt = A^2 \\cdot \\text{duration}$.`,
+        solution_steps: [
+          {
+            title: "Identify Amplitude and Pulse Duration",
+            content: `The pulse has amplitude $A = ${amp}$ and duration $\\tau = ${width}$ centered at $t_0 = ${shift}$.`
+          },
+          {
+            title: "Apply Continuous Energy Integral",
+            content: `$E_x = \\int_{${shift} - ${width / 2}}^{${shift} + ${width / 2}} (${amp})^2 dt = (${amp})^2 \\cdot [ (${shift + width / 2}) - (${shift - width / 2}) ]$.`
+          },
+          {
+            title: "Final Energy Result",
+            content: `$E_x = ${amp * amp} \\cdot ${width} = ${energy} \\text{ J}$. Notice the time shift $t_0 = ${shift}$ has no effect on total energy!`
+          }
+        ]
+      };
+    },
+
+    // 6. Signals Convolution Duration
+    () => {
+      const t1 = randInt(2, 5);
+      const t2 = randInt(3, 6);
+      const total = t1 + t2;
+      const correct = `T_{total} = ${total}`;
+      const wrong1 = `T_{total} = ${t1 * t2}`;
+      const wrong2 = `T_{total} = ${total - 1}`;
+      const wrong3 = `T_{total} = ${Math.max(t1, t2)}`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "signals",
+        topic: "Continuous Convolution",
+        difficulty: "Standard",
+        is_dynamic: true,
+        question: `If signal $x(t)$ has non-zero duration $T_1 = ${t1}$ s and impulse response $h(t)$ has duration $T_2 = ${t2}$ s, what is the exact duration of their convolution $y(t) = (x * h)(t)$?`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `For continuous-time signals with compact support, the duration of convolution is the sum of the individual durations: $T_y = T_1 + T_2$.`,
+        solution_steps: [
+          {
+            title: "Recall Convolution Duration Theorem",
+            content: `If $x(t)$ is supported on $[a_1, b_1]$ and $h(t)$ is supported on $[a_2, b_2]$, then $(x * h)(t)$ is supported on $[a_1 + a_2, b_1 + b_2]$.`
+          },
+          {
+            title: "Sum Interval Lengths",
+            content: `Duration $T_y = (b_1 + b_2) - (a_1 + a_2) = (b_1 - a_1) + (b_2 - a_2) = T_1 + T_2$.`
+          },
+          {
+            title: "Compute Output Duration",
+            content: `$T_y = ${t1} + ${t2} = ${total}$ seconds.`
+          }
+        ]
+      };
+    },
+
+    // 7. Harmonic Frequency and Fundamental Period
+    () => {
+      const k = randInt(2, 8);
+      const correct = `T_0 = \\frac{2\\pi}{${k}} \\text{ s}, \\quad f_0 = \\frac{${k}}{2\\pi} \\text{ Hz}`;
+      const wrong1 = `T_0 = \\frac{\\pi}{${k}} \\text{ s}, \\quad f_0 = ${k} \\text{ Hz}`;
+      const wrong2 = `T_0 = ${k}\\pi \\text{ s}, \\quad f_0 = \\frac{1}{${k}} \\text{ Hz}`;
+      const wrong3 = `T_0 = \\frac{${k}}{2\\pi} \\text{ s}, \\quad f_0 = \\frac{2\\pi}{${k}} \\text{ Hz}`;
+      return {
+        id: `dyn_${Date.now()}_${randInt(100, 999)}`,
+        category: "signals",
+        topic: "Fourier Harmonics & Periodicity",
+        difficulty: "Fundamentals",
+        is_dynamic: true,
+        question: `Determine the fundamental angular period $T_0$ and cyclic frequency $f_0$ of the continuous harmonic signal $x(t) = \\cos(${k}t + \\pi/4)$.`,
+        options: [correct, wrong1, wrong2, wrong3].sort(() => Math.random() - 0.5),
+        correct_latex: correct,
+        hint: `Match with standard form $\\cos(\\omega_0 t + \\phi)$. Fundamental period is $T_0 = \\frac{2\\pi}{\\omega_0}$ and $f_0 = \\frac{\\omega_0}{2\\pi}$.`,
+        solution_steps: [
+          {
+            title: "Identify Angular Frequency",
+            content: `From $x(t) = \\cos(${k}t + \\pi/4)$, the fundamental angular frequency is $\\omega_0 = ${k}$ rad/s.`
+          },
+          {
+            title: "Compute Fundamental Period",
+            content: `$T_0 = \\frac{2\\pi}{\\omega_0} = \\frac{2\\pi}{${k}}$ seconds.`
+          },
+          {
+            title: "Compute Cyclic Frequency",
+            content: `$f_0 = \\frac{1}{T_0} = \\frac{${k}}{2\\pi}$ Hz.`
+          }
+        ]
+      };
+    }
+  ];
+
+  const gen = randChoice(templates);
+  const prob = gen();
+  // Ensure the correct option is tagged with its index in options
+  prob.correct_index = prob.options.indexOf(prob.correct_latex);
+  return prob;
+}

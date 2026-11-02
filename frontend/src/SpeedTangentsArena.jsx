@@ -116,363 +116,123 @@ export function SpeedTangentsArena({ MathFormula }) {
   const [problem, setProblem] = useState(() => createProblem("mvt"));
 
   function createProblem(mode) {
+    const rand = (min, max) => Math.random() * (max - min) + min;
+    const randRound = (min, max, dec = 1) => Number((Math.random() * (max - min) + min).toFixed(dec));
+
     if (mode === "mvt") {
-      const bank = [
-        {
-          name: "f(x) = x^2 - 1.5",
-          latex: "f(x) = x^2 - 1.5",
-          f: (x) => x * x - 1.5,
-          df: (x) => 2 * x,
-          a: -2.0,
-          b: 2.2,
-          solveC: (a, b) => (a + b) / 2
-        },
-        {
-          name: "f(x) = -0.7x^2 + 2.5",
-          latex: "f(x) = -0.7x^2 + 2.5",
-          f: (x) => -0.7 * x * x + 2.5,
-          df: (x) => -1.4 * x,
-          a: -1.6,
-          b: 2.4,
-          solveC: (a, b) => (a + b) / 2
-        },
-        {
-          name: "f(x) = 0.4(x^3 - 3x)",
-          latex: "f(x) = 0.4(x^3 - 3x)",
-          f: (x) => 0.4 * (x * x * x - 3 * x),
-          df: (x) => 0.4 * (3 * x * x - 3),
-          a: -1.8,
-          b: 1.8,
-          solveC: (a, b) => {
-            const slope = (0.4 * (b * b * b - 3 * b) - 0.4 * (a * a * a - 3 * a)) / (b - a);
-            const val = (slope / 0.4 + 3) / 3;
-            return Math.sqrt(Math.max(val, 0));
-          }
-        },
-        {
-          name: "f(x) = 1.6\\sin(1.2x)",
-          latex: "f(x) = 1.6\\sin(1.2x)",
-          f: (x) => 1.6 * Math.sin(1.2 * x),
-          df: (x) => 1.6 * 1.2 * Math.cos(1.2 * x),
-          a: -1.2,
-          b: 2.2,
-          solveC: (a, b) => {
-            const secant = (1.6 * Math.sin(1.2 * b) - 1.6 * Math.sin(1.2 * a)) / (b - a);
-            const ratio = Math.min(Math.max(secant / (1.6 * 1.2), -1), 1);
-            return Math.acos(ratio) / 1.2;
-          }
-        },
-        {
-          name: "f(x) = 2.0 e^{-0.4 x^2}",
-          latex: "f(x) = 2.0 e^{-0.4 x^2}",
-          f: (x) => 2.0 * Math.exp(-0.4 * x * x),
-          df: (x) => 2.0 * (-0.8 * x) * Math.exp(-0.4 * x * x),
-          a: -1.8,
-          b: 1.8,
-          solveC: () => 0.0
-        },
-        {
-          name: "f(x) = 0.3x^3 - x + 0.8",
-          latex: "f(x) = 0.3x^3 - x + 0.8",
-          f: (x) => 0.3 * x * x * x - x + 0.8,
-          df: (x) => 0.9 * x * x - 1.0,
-          a: -2.0,
-          b: 2.0,
-          solveC: (a, b) => {
-            const secant = (0.3 * (b * b * b - a * a * a) - (b - a)) / (b - a);
-            return Math.sqrt(Math.max((secant + 1.0) / 0.9, 0));
-          }
-        }
-      ];
-      const p = bank[Math.floor(Math.random() * bank.length)];
-      return {
-        ...p,
-        trueC: p.solveC(p.a, p.b),
-        secantSlope: (p.f(p.b) - p.f(p.a)) / (p.b - p.a)
-      };
+      const type = Math.floor(Math.random() * 4);
+      if (type === 0) {
+        // Quadratic: f(x) = k*x^2 + c0. Secant slope = k*(b+a). f'(c) = 2kc => c = (a+b)/2
+        const k = randRound(0.4, 1.4, 2);
+        const c0 = randRound(-2.0, 2.0, 1);
+        const a = randRound(-2.2, -1.0, 1);
+        const b = randRound(1.0, 2.2, 1);
+        const f = (x) => k * x * x + c0;
+        const df = (x) => 2 * k * x;
+        const trueC = (a + b) / 2;
+        return {
+          name: `f(x) = ${k}x² ${c0 >= 0 ? '+' : ''}${c0}`,
+          latex: `f(x) = ${k}x^2 ${c0 >= 0 ? '+' : ''}${c0}`,
+          f,
+          df,
+          a,
+          b,
+          trueC,
+          secantSlope: (f(b) - f(a)) / (b - a)
+        };
+      } else if (type === 1) {
+        // Cubic: f(x) = k*(x^3 - m*x)
+        const k = randRound(0.25, 0.6, 2);
+        const m = randRound(2.0, 3.5, 1);
+        const a = randRound(-1.9, -1.2, 1);
+        const b = randRound(1.2, 1.9, 1);
+        const f = (x) => k * (x * x * x - m * x);
+        const df = (x) => k * (3 * x * x - m);
+        const secant = (f(b) - f(a)) / (b - a);
+        const cCandidate = Math.sqrt(Math.max((secant / k + m) / 3, 0));
+        return {
+          name: `f(x) = ${k}(x³ - ${m}x)`,
+          latex: `f(x) = ${k}(x^3 - ${m}x)`,
+          f,
+          df,
+          a,
+          b,
+          trueC: cCandidate,
+          secantSlope: secant
+        };
+      } else if (type === 2) {
+        // Sinusoid: f(x) = A*sin(w*x)
+        const A = randRound(1.2, 2.0, 1);
+        const w = randRound(0.8, 1.4, 1);
+        const a = randRound(-1.4, -0.6, 1);
+        const b = randRound(1.0, 2.2, 1);
+        const f = (x) => A * Math.sin(w * x);
+        const df = (x) => A * w * Math.cos(w * x);
+        const secant = (f(b) - f(a)) / (b - a);
+        const ratio = Math.min(Math.max(secant / (A * w), -1), 1);
+        const trueC = Math.acos(ratio) / w;
+        return {
+          name: `f(x) = ${A}sin(${w}x)`,
+          latex: `f(x) = ${A}\sin(${w}x)`,
+          f,
+          df,
+          a,
+          b,
+          trueC: Number.isFinite(trueC) ? trueC : (a + b) / 2,
+          secantSlope: secant
+        };
+      } else {
+        // Gaussian: f(x) = A*exp(-k*x^2)
+        const A = randRound(1.5, 2.5, 1);
+        const k = randRound(0.3, 0.6, 2);
+        const a = -1.8;
+        const b = 1.8;
+        const f = (x) => A * Math.exp(-k * x * x);
+        const df = (x) => -2 * A * k * x * Math.exp(-k * x * x);
+        return {
+          name: `f(x) = ${A}e^{-${k}x²}`,
+          latex: `f(x) = ${A}e^{-${k}x^2}`,
+          f,
+          df,
+          a,
+          b,
+          trueC: 0.0,
+          secantSlope: 0.0
+        };
+      }
     } else if (mode === "extrema") {
-      const bank = [
-        {
-          name: "f(x) = 0.5(x^3 - 3x)",
-          latex: "f(x) = 0.5(x^3 - 3x)",
-          f: (x) => 0.5 * (x * x * x - 3 * x),
-          df: (x) => 0.5 * (3 * x * x - 3),
-          a: -2.3,
-          b: 2.3,
-          targets: [
-            { x: -1.0, type: "Local Maximum", y: 1.0 },
-            { x: 1.0, type: "Local Minimum", y: -1.0 }
-          ]
-        },
-        {
-          name: "f(x) = 0.2(x^4 - 4x^2)",
-          latex: "f(x) = 0.2(x^4 - 4x^2)",
-          f: (x) => 0.2 * (x * x * x * x - 4 * x * x),
-          df: (x) => 0.2 * (4 * x * x * x - 8 * x),
-          a: -2.2,
-          b: 2.2,
-          targets: [
-            { x: -1.41, type: "Left Minimum", y: -0.8 },
-            { x: 0.0, type: "Central Maximum", y: 0.0 },
-            { x: 1.41, type: "Right Minimum", y: -0.8 }
-          ]
-        },
-        {
-          name: "f(x) = 1.5\\cos(x)",
-          latex: "f(x) = 1.5\\cos(x)",
-          f: (x) => 1.5 * Math.cos(x),
-          df: (x) => -1.5 * Math.sin(x),
-          a: -3.14,
-          b: 3.14,
-          targets: [
-            { x: 0.0, type: "Peak Crest (f'=0)", y: 1.5 }
-          ]
-        },
-        {
-          name: "f(x) = -0.6(x^2 - 4)",
-          latex: "f(x) = -0.6x^2 + 2.4",
-          f: (x) => -0.6 * x * x + 2.4,
-          df: (x) => -1.2 * x,
-          a: -2.5,
-          b: 2.5,
-          targets: [
-            { x: 0.0, type: "Parabolic Apex", y: 2.4 }
-          ]
-        }
-      ];
-      return bank[Math.floor(Math.random() * bank.length)];
+      const shift = randRound(-0.5, 0.5, 1);
+      const k = randRound(0.3, 0.6, 2);
+      const f = (x) => k * ((x - shift) * (x - shift) * (x - shift) - 3 * (x - shift));
+      const df = (x) => 3 * k * ((x - shift) * (x - shift) - 1);
+      return {
+        name: `f(x) = ${k}((x ${shift >= 0 ? '-' : '+'} ${Math.abs(shift)})³ - 3(x ${shift >= 0 ? '-' : '+'} ${Math.abs(shift)}))`,
+        latex: `f(x) = ${k}((x - ${shift})^3 - 3(x - ${shift}))`,
+        f,
+        df,
+        a: -2.4 + shift,
+        b: 2.4 + shift,
+        targets: [
+          { x: Number((-1.0 + shift).toFixed(2)), type: "Local Maximum", y: f(-1.0 + shift) },
+          { x: Number((1.0 + shift).toFixed(2)), type: "Local Minimum", y: f(1.0 + shift) }
+        ]
+      };
     } else {
       // Riemann Area Blitz
-      const bank = [
-        {
-          name: "f(x) = x^2 on [0, 2]",
-          latex: "\\int_0^2 x^2\\,dx = \\frac{8}{3} \\approx 2.67",
-          f: (x) => x * x,
-          a: 0,
-          b: 2.0,
-          trueArea: 2.667
-        },
-        {
-          name: "f(x) = \\sin(x) on [0, \\pi]",
-          latex: "\\int_0^\\pi \\sin(x)\\,dx = 2.00",
-          f: (x) => Math.sin(x),
-          a: 0,
-          b: 3.1416,
-          trueArea: 2.00
-        },
-        {
-          name: "f(x) = 3x - x^2 on [0, 3]",
-          latex: "\\int_0^3 (3x - x^2)\\,dx = 4.50",
-          f: (x) => 3 * x - x * x,
-          a: 0,
-          b: 3.0,
-          trueArea: 4.50
-        },
-        {
-          name: "f(x) = 0.5x + 1 on [0, 4]",
-          latex: "\\int_0^4 (0.5x + 1)\\,dx = 8.00",
-          f: (x) => 0.5 * x + 1,
-          a: 0,
-          b: 4.0,
-          trueArea: 8.00
-        },
-        {
-          name: "f(x) = e^{0.5x} on [0, 2]",
-          latex: "\\int_0^2 e^{0.5x}\\,dx \\approx 3.44",
-          f: (x) => Math.exp(0.5 * x),
-          a: 0,
-          b: 2.0,
-          trueArea: 3.437
-        }
-      ];
-      return bank[Math.floor(Math.random() * bank.length)];
+      const p = randRound(0.4, 1.2, 1);
+      const b = randRound(1.8, 3.2, 1);
+      const f = (x) => p * x * x + 0.5;
+      const trueArea = (p * Math.pow(b, 3)) / 3 + 0.5 * b;
+      return {
+        name: `f(x) = ${p}x² + 0.5 on [0, ${b}]`,
+        latex: `\int_0^{${b}} (${p}x^2 + 0.5)\,dx \approx ${trueArea.toFixed(2)}`,
+        f,
+        a: 0,
+        b,
+        trueArea: Number(trueArea.toFixed(2))
+      };
     }
   }
-
-  // Timer loop
-  useEffect(() => {
-    if (gameState === "playing") {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current);
-            sounds.miss();
-            handleTimeout();
-            return 0;
-          }
-          if (prev <= 4) {
-            sounds.tick();
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [gameState]);
-
-  const handleTimeout = () => {
-    submitGuess(true);
-  };
-
-  const startNewGame = (mode = gameMode) => {
-    setGameMode(mode);
-    setScore(0);
-    setStreak(0);
-    setMaxStreak(0);
-    setRound(1);
-    setRoundHistory([]);
-    setLastResult(null);
-    setExtremaFound([]);
-
-    const newP = createProblem(mode);
-    setProblem(newP);
-    if (mode === "mvt") {
-      setUserGuess((newP.a + newP.b) / 2);
-    } else if (mode === "riemann") {
-      setUserGuess(Number((newP.trueArea * 0.75).toFixed(2)));
-    } else {
-      setUserGuess(0);
-    }
-    setTimeLeft(mode === "extrema" ? 20 : 15);
-    setGameState("playing");
-  };
-
-  const submitGuess = (isTimeOut = false) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    if (gameMode === "mvt") {
-      const error = Math.abs(userGuess - problem.trueC);
-      let accuracy = Math.max(0, 100 - error * 55);
-      let rank = "Missed";
-      let basePts = 50;
-
-      if (accuracy >= 94) {
-        rank = "🎯 BULLSEYE! PERFECT TANGENT";
-        basePts = 1200 + timeLeft * 50;
-        sounds.bullseye();
-      } else if (accuracy >= 80) {
-        rank = "✨ EXCELLENT PARALLELISM";
-        basePts = 850 + timeLeft * 25;
-        sounds.success();
-      } else if (accuracy >= 60) {
-        rank = "👍 CLOSE FIT";
-        basePts = 450;
-        sounds.success();
-      } else {
-        rank = "❌ SLOPE MISMATCH";
-        basePts = isTimeOut ? 0 : 50;
-        sounds.miss();
-      }
-
-      const curStreak = accuracy >= 60 ? streak + 1 : 0;
-      setStreak(curStreak);
-      if (curStreak > maxStreak) setMaxStreak(curStreak);
-
-      const multiplier = 1 + (curStreak > 1 ? (curStreak - 1) * 0.2 : 0);
-      const earned = Math.round(basePts * multiplier);
-      const newScore = score + earned;
-      setScore(newScore);
-
-      if (newScore > highScore) {
-        setHighScore(newScore);
-        localStorage.setItem("ai_math_arena_high_score", String(newScore));
-      }
-
-      const roundSummary = {
-        round,
-        rank,
-        accuracy: accuracy.toFixed(1),
-        error: error.toFixed(3),
-        userGuess: userGuess.toFixed(2),
-        trueVal: problem.trueC.toFixed(2),
-        points: earned
-      };
-
-      setLastResult(roundSummary);
-      setRoundHistory((prev) => [...prev, roundSummary]);
-      setGameState("round_result");
-    } else if (gameMode === "extrema") {
-      // Extrema sniper evaluation
-      const targets = problem.targets || [];
-      const foundCount = extremaFound.length;
-      let earned = foundCount * 650 + timeLeft * 35;
-      if (foundCount === targets.length) {
-        sounds.bullseye();
-      } else {
-        sounds.miss();
-      }
-
-      const curStreak = foundCount === targets.length ? streak + 1 : 0;
-      setStreak(curStreak);
-      if (curStreak > maxStreak) setMaxStreak(curStreak);
-
-      const roundSummary = {
-        round,
-        rank: foundCount === targets.length ? "🎯 ALL CRITICAL POINTS SNIPED" : "PARTIAL DISCOVERY",
-        accuracy: ((foundCount / (targets.length || 1)) * 100).toFixed(0),
-        points: earned
-      };
-      setScore((s) => s + earned);
-      setLastResult(roundSummary);
-      setRoundHistory((prev) => [...prev, roundSummary]);
-      setGameState("round_result");
-    } else if (gameMode === "riemann") {
-      // Riemann Area Blitz
-      const error = Math.abs(userGuess - problem.trueArea);
-      const percentError = (error / Math.max(problem.trueArea, 0.1)) * 100;
-      let accuracy = Math.max(0, 100 - percentError);
-      let rank = "Missed";
-      let basePts = 50;
-
-      if (accuracy >= 90) {
-        rank = "🎯 AREA MASTER! EXACT INTEGRAL FIT";
-        basePts = 1300 + timeLeft * 50;
-        sounds.bullseye();
-      } else if (accuracy >= 75) {
-        rank = "✨ SHARP GEOMETRIC INTUITION";
-        basePts = 850 + timeLeft * 25;
-        sounds.success();
-      } else if (accuracy >= 55) {
-        rank = "👍 FAIR APPROXIMATION";
-        basePts = 450;
-        sounds.success();
-      } else {
-        rank = "❌ INTEGRAL DIVERGENCE";
-        basePts = isTimeOut ? 0 : 50;
-        sounds.miss();
-      }
-
-      const curStreak = accuracy >= 55 ? streak + 1 : 0;
-      setStreak(curStreak);
-      if (curStreak > maxStreak) setMaxStreak(curStreak);
-
-      const multiplier = 1 + (curStreak > 1 ? (curStreak - 1) * 0.2 : 0);
-      const earned = Math.round(basePts * multiplier);
-      const newScore = score + earned;
-      setScore(newScore);
-
-      if (newScore > highScore) {
-        setHighScore(newScore);
-        localStorage.setItem("ai_math_arena_high_score", String(newScore));
-      }
-
-      const roundSummary = {
-        round,
-        rank,
-        accuracy: accuracy.toFixed(1),
-        error: error.toFixed(2),
-        userGuess: userGuess.toFixed(2),
-        trueVal: problem.trueArea.toFixed(2),
-        points: earned
-      };
-
-      setLastResult(roundSummary);
-      setRoundHistory((prev) => [...prev, roundSummary]);
-      setGameState("round_result");
-    }
-  };
 
   const nextRound = () => {
     if (round >= totalRounds) {
