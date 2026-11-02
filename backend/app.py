@@ -897,7 +897,8 @@ def calculate_riemann_sum(req: RiemannRequest):
 # ========================================================
 
 class SignalGenerateRequest(BaseModel):
-    signal_type: str = Field("step", description="impulse, step, ramp, rect, sine, cosine, exponential, sinc")
+    signal_type: str = Field("step", description="impulse, step, ramp, rect, sine, cosine, exponential, sinc, chirp, damped_sine, gaussian, custom")
+    custom_expression: str = Field("", description="Custom mathematical expression in t or n")
     domain: str = Field("continuous", description="continuous or discrete")
     time_start: float = Field(-5.0, description="Start time/index")
     time_end: float = Field(5.0, description="End time/index")
@@ -912,9 +913,34 @@ class SignalGenerateRequest(BaseModel):
     amp_scale: float = Field(1.0, description="Amplitude scaling factor")
 
 
-def eval_base_signal(t_val: float, signal_type: str, amp: float, freq: float, phase: float, decay: float, width: float, domain: str) -> float:
+def eval_base_signal(t_val: float, signal_type: str, amp: float, freq: float, phase: float, decay: float, width: float, domain: str, custom_expr: str = "") -> float:
     st = signal_type.lower()
-    if st == "impulse":
+    if st == "custom" and custom_expr.strip():
+        try:
+            clean = custom_expr.replace("^", "**")
+            safe_dict = {
+                "t": t_val,
+                "n": t_val,
+                "x": t_val,
+                "sin": np.sin,
+                "cos": np.cos,
+                "tan": np.tan,
+                "exp": np.exp,
+                "log": np.log,
+                "ln": np.log,
+                "sqrt": np.sqrt,
+                "abs": abs,
+                "sinc": lambda v: 1.0 if abs(v) < 1e-9 else np.sin(np.pi * v) / (np.pi * v),
+                "rect": lambda v: 1.0 if abs(v) <= 0.5 + 1e-9 else 0.0,
+                "step": lambda v: 1.0 if v >= -1e-9 else 0.0,
+                "pi": np.pi,
+                "e": np.e
+            }
+            res = float(eval(clean, {"__builtins__": {}}, safe_dict))
+            return amp * res if np.isfinite(res) else 0.0
+        except Exception:
+            return 0.0
+    elif st == "impulse":
         if domain == "discrete":
             return amp if abs(round(t_val)) == 0 else 0.0
         else:
@@ -940,6 +966,12 @@ def eval_base_signal(t_val: float, signal_type: str, amp: float, freq: float, ph
         if abs(t_val) < 1e-9:
             return amp
         return amp * np.sin(np.pi * t_val) / (np.pi * t_val)
+    elif st == "chirp":
+        return amp * np.sin(0.7 * t_val * t_val + phase)
+    elif st == "damped_sine":
+        return amp * np.exp(-0.35 * abs(t_val)) * np.cos(freq * t_val + phase)
+    elif st == "gaussian":
+        return amp * np.exp(-0.5 * t_val * t_val)
     return 0.0
 
 
@@ -966,11 +998,11 @@ def generate_signal(req: SignalGenerateRequest):
             scale_a = -abs(scale_a)
 
         for t in t_axis:
-            y_orig = float(eval_base_signal(t, req.signal_type, req.amplitude, req.frequency, req.phase, req.decay, req.pulse_width, req.domain))
+            y_orig = float(eval_base_signal(t, req.signal_type, req.amplitude, req.frequency, req.phase, req.decay, req.pulse_width, req.domain, req.custom_expression))
             original_samples.append({"t": round(t, 4), "y": round(y_orig, 5)})
 
             t_eval = scale_a * (t - req.time_shift)
-            y_trans = float(req.amp_scale * eval_base_signal(t_eval, req.signal_type, req.amplitude, req.frequency, req.phase, req.decay, req.pulse_width, req.domain))
+            y_trans = float(req.amp_scale * eval_base_signal(t_eval, req.signal_type, req.amplitude, req.frequency, req.phase, req.decay, req.pulse_width, req.domain, req.custom_expression))
             transformed_samples.append({"t": round(t, 4), "y": round(y_trans, 5)})
 
         var_sym = "n" if is_discrete else "t"
@@ -989,8 +1021,18 @@ def generate_signal(req: SignalGenerateRequest):
             base_tex = f"{req.amplitude}\\cos({req.frequency}{var_sym} + {req.phase})"
         elif st == "exponential":
             base_tex = f"{req.amplitude}e^{{{req.decay}{var_sym}}} u({var_sym})"
-        else:
+        elif st == "sinc":
             base_tex = f"{req.amplitude}\\text{{sinc}}({var_sym})"
+        elif st == "chirp":
+            base_tex = f"{req.amplitude}\\sin(0.7 {var_sym}^2)"
+        elif st == "damped_sine":
+            base_tex = f"{req.amplitude}e^{{-0.35|{var_sym}|}}\\cos({req.frequency}{var_sym})"
+        elif st == "gaussian":
+            base_tex = f"{req.amplitude}e^{{-{var_sym}^2/2}}"
+        elif st == "custom":
+            base_tex = req.custom_expression or f"x({var_sym})"
+        else:
+            base_tex = f"x({var_sym})"
 
         shift_str = f" - {req.time_shift}" if req.time_shift > 0 else (f" + {abs(req.time_shift)}" if req.time_shift < 0 else "")
         rev_str = "-" if req.time_reversal else ""
@@ -1722,32 +1764,169 @@ def ai_analyze_math(req: AIAnalyzeRequest):
                 "Synthesize a triangle wave with 7 harmonics"
             ]
 
+        elif any(k in lower_msg for k in ["gradient", "saddle", "tangent plane", "multivariable", "divergence", "curl", "stokes", "green", "hessian", "partial derivative"]):
+            steps.append({
+                "title": "Gradient Vector Ascent",
+                "latex": r"\nabla f(x, y) = \left\langle \frac{\partial f}{\partial x}, \frac{\partial f}{\partial y} \right\rangle",
+                "notes": "Direction of maximum directional derivative magnitude."
+            })
+            steps.append({
+                "title": "Tangent Plane Linearization",
+                "latex": r"z - z_0 = f_x(x_0, y_0)(x - x_0) + f_y(x_0, y_0)(y - y_0)",
+                "notes": "First-order Taylor approximation in R^3."
+            })
+            steps.append({
+                "title": "Hessian Second Derivative Test",
+                "latex": r"D = f_{xx} f_{yy} - (f_{xy})^2",
+                "notes": "Discriminant identifies local extrema vs hyperbolic saddle points."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"In **Multivariable & 3D Vector Calculus**, scalar fields $z = f(x, y)$ are characterized locally by their partial gradients $\nabla f = \langle f_x, f_y \rangle$. The gradient vector is always orthogonal to level contour curves $f(x, y) = c$."
+                "\n\n"
+                r"Critical points occur where $\nabla f = \mathbf{0}$. The Hessian determinant $D = f_{xx}f_{yy} - (f_{xy})^2$ classifies them into local minima ($D > 0, f_{xx} > 0$), local maxima ($D > 0, f_{xx} < 0$), or hyperbolic saddle points ($D < 0$)!"
+            )
+            actions.append({"label": "Launch 3D Vector Calculus Lab", "domain": "calculus", "page": "multivariable"})
+            actions.append({"label": "Critical Points & Extrema", "domain": "calculus", "page": "critical"})
+            suggested_prompts = [
+                "Find critical points and saddle point of z = x^2 - y^2",
+                "How do Lagrange multipliers solve constrained optimization?",
+                "Explain the physical meaning of Curl and Divergence"
+            ]
+
+        elif any(k in lower_msg for k in ["laplace", "z-transform", "transfer function", "poles", "zeros", "roc"]):
+            steps.append({
+                "title": "Bilateral Laplace Transform",
+                "latex": r"X(s) = \int_{-\infty}^{\infty} x(t) e^{-st}\,dt, \quad s = \sigma + j\omega",
+                "notes": "Continuous frequency s-plane mapping."
+            })
+            steps.append({
+                "title": "Transfer Function Formulation",
+                "latex": r"H(s) = \frac{Y(s)}{X(s)} = \frac{b_m s^m + \dots + b_0}{a_n s^n + \dots + a_0}",
+                "notes": "Roots of denominator are system natural frequency poles."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"The **Laplace Transform** generalizes Fourier analysis by incorporating real exponential damping $\sigma$, creating the complex frequency variable $s = \sigma + j\omega$."
+                "\n\n"
+                r"A continuous-time LTI system is **BIBO stable** if and only if all poles of its transfer function $H(s)$ reside strictly in the open left half of the complex $s$-plane ($\text{Re}(p_k) < 0$)."
+            )
+            actions.append({"label": "Open LTI System Analyzer", "domain": "signals", "sub": "lti"})
+            actions.append({"label": "Explore Signal Waveforms", "domain": "signals", "sub": "explorer"})
+            suggested_prompts = [
+                "Find the Laplace transform of e^(-2t) * u(t)",
+                "Why must causal stable systems have poles in left-half plane?",
+                "How does the bilateral Laplace ROC determine causality?"
+            ]
+
+        elif any(k in lower_msg for k in ["differential equation", "ode", "harmonic oscillator", "dy/dx"]):
+            steps.append({
+                "title": "Second-Order Damped Oscillator ODE",
+                "latex": r"\frac{d^2 y}{dt^2} + 2\zeta\omega_n \frac{dy}{dt} + \omega_n^2 y = 0",
+                "notes": "Fundamental governing equation across physics and circuit networks."
+            })
+            steps.append({
+                "title": "Characteristic Roots",
+                "latex": r"r_{1,2} = -\zeta\omega_n \pm \omega_n\sqrt{\zeta^2 - 1}",
+                "notes": "Damping ratio zeta determines overdamped, critically damped, or underdamped oscillation."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"In dynamical system theory, differential equations model physical states evolving in time. For the canonical harmonic oscillator:"
+                "\n\n"
+                r"- $\zeta < 1$: Underdamped ringing oscillation $y(t) = A e^{-\zeta\omega_n t} \cos(\omega_d t - \phi)$"
+                "\n"
+                r"- $\zeta = 1$: Critically damped (fastest non-oscillatory return to equilibrium)"
+                "\n"
+                r"- $\zeta > 1$: Overdamped exponential decay."
+            )
+            actions.append({"label": "Open LTI System Analyzer", "domain": "signals", "sub": "lti"})
+            actions.append({"label": "Launch Symbolic Calculus Engine", "domain": "calculus", "page": "calculus"})
+            suggested_prompts = [
+                "Solve dy/dx + 2y = e^(-x) using integrating factor",
+                "Explain the physical difference between damping ratios",
+                "How does step response relate to impulse response?"
+            ]
+
+        elif any(k in lower_msg for k in ["euler", "complex number", "e^(i", "e^(j", "polar form"]):
+            steps.append({
+                "title": "Euler's Formula",
+                "latex": r"e^{i\theta} = \cos\theta + i\sin\theta",
+                "notes": "Connecting complex exponential growth to trigonometric rotation."
+            })
+            steps.append({
+                "title": "Euler's Identity",
+                "latex": r"e^{i\pi} + 1 = 0",
+                "notes": "Uniting the 5 fundamental constants: 0, 1, e, i, pi."
+            })
+            reply = (
+                f"**{persona_name}:** {tone_greeting}\n\n"
+                r"**Euler's Formula** $e^{i	heta} = \cos	heta + i\sin	heta$ is the profound foundation of Fourier analysis, quantum mechanics, and electrical engineering. At $	heta = \pi$:"
+                "\n\n"
+                r"$$e^{i\pi} + 1 = 0$$"
+                "\n\n"
+                r"In signal processing, this allows representing sinusoidal voltages and waves as rotating complex phasors $e^{j\omega t}$, turning calculus differential equations into algebraic polynomials!"
+            )
+            actions.append({"label": "Launch Fourier Analysis Lab", "domain": "signals", "sub": "fourier"})
+            actions.append({"label": "Signal Explorer Waveforms", "domain": "signals", "sub": "explorer"})
+            suggested_prompts = [
+                "Prove Euler's formula using Taylor series expansions",
+                "What is the physical meaning of negative frequency -omega?",
+                "How do rotating phasors describe AC circuits?"
+            ]
+
         else:
             if sym_expr is not None:
                 f_latex = sp.latex(sym_expr)
                 d_latex = sp.latex(sym_derivative)
                 i_latex = sp.latex(sym_integral) if sym_integral is not None else r"\text{Non-elementary}"
+                steps.append({
+                    "title": "Function Definition",
+                    "latex": "f(x) = " + f_latex,
+                    "notes": "Target analytical mathematical expression."
+                })
+                steps.append({
+                    "title": "First Derivative",
+                    "latex": "f'(x) = " + d_latex,
+                    "notes": "Exact instantaneous rate of change."
+                })
                 reply = (
                     f"**{persona_name}:** {tone_greeting}\n\n"
-                    f"I analyzed the function $f(x) = {f_latex}$:\n\n"
+                    f"I analyzed the mathematical function $f(x) = {f_latex}$:\n\n"
                     f"- **First Derivative:** $f'(x) = {d_latex}$\n"
-                    f"- **Indefinite Integral:** $\\int f(x)\\,dx = {i_latex} + C$\n"
+                    f"- **Indefinite Primitive:** $\\int f(x)\\,dx = {i_latex} + C$\n"
                 )
                 if sym_limit_0 is not None:
-                    reply += f"- **Limit as $x \\to 0$:** $\\lim_{{x \\to 0}} f(x) = {sp.latex(sym_limit_0)}$\n"
+                    reply += f"- **Limit at Origin ($x \\to 0$):** $\\lim_{{x \\to 0}} f(x) = {sp.latex(sym_limit_0)}\n"
                 actions.append({"label": "Open in Symbolic Engine", "domain": "calculus", "page": "calculus", "formula": str(sym_expr)})
                 actions.append({"label": "Inspect 3D MVT Dynamics", "domain": "calculus", "page": "mvt", "formula": str(sym_expr)})
             else:
                 reply = (
                     f"**{persona_name}:** {tone_greeting}\n\n"
-                    "I am your personalized AI Math Copilot, connected to the exact SymPy computational engine and 10 interactive physics and math laboratories.\n\n"
-                    "You can ask me to calculate derivatives, integrals, limits, critical points, LTI stability proofs, or Fourier harmonics, or ask for conceptual explanations with step-by-step KaTeX proofs!"
+                    f"Regarding your inquiry **\"{msg}\"**:\n\n"
+                    "In computational mathematics and physical modeling, resolving such problems connects three core pillars:\n\n"
+                    "1. **Differential Analysis:** Local rate of change $f'(x) = \\lim_{h \\to 0} \\frac{f(x+h) - f(x)}{h}$ defines trajectory curves and optimization gradients $\\nabla f$.\n\n"
+                    "2. **Integral Accumulation:** Total energy, flux, and probability mass evaluate via $\\int_a^b f(x)\\,dx$, guaranteed by the Fundamental Theorem of Calculus.\n\n"
+                    "3. **Harmonic Synthesis:** Transforming time signals into frequency spectra via $X(\\omega) = \\int x(t)e^{-j\\omega t}dt$ reveals resonance and stability.\n\n"
+                    "You can explore closed-form derivations, 3D plots, and numerical simulations directly across our interactive laboratories below!"
                 )
+                steps.append({
+                    "title": "Mathematical Modeling",
+                    "latex": r"y = f(x) \quad \text{or} \quad x(t) \in L^2(\mathbb{R})",
+                    "notes": "Formalize the problem structure in continuous functional space."
+                })
+                steps.append({
+                    "title": "Calculus & Spectral Projections",
+                    "latex": r"f'(x) = \lim_{h \to 0}\frac{f(x+h)-f(x)}{h}, \quad X(\omega) = \int x(t)e^{-j\omega t}dt",
+                    "notes": "Evaluate analytical derivatives and Fourier spectrum."
+                })
+                actions.append({"label": "Symbolic Calculus Engine", "domain": "calculus", "page": "calculus"})
+                actions.append({"label": "3D Vector Calculus Lab", "domain": "calculus", "page": "multivariable"})
+                actions.append({"label": "Signals & Waveform Explorer", "domain": "signals", "sub": "explorer"})
                 suggested_prompts = [
-                    "Differentiate sin(x)/x with quotient rule",
-                    "Explain the Mean Value Theorem with a 3D example",
-                    "Find critical points of x^3 - 3*x",
-                    "Prove if y(t) = x(2t) is an LTI system"
+                    "Explain the Fundamental Theorem of Calculus with examples",
+                    "How does gradient descent use partial derivatives?",
+                    "Why does Fourier transform decompose signals into sines and cosines?"
                 ]
 
         return {

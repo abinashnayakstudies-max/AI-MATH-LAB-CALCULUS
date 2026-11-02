@@ -55,7 +55,7 @@ import { WebAudioDSP } from "./WebAudioDSP.jsx";
 import { MultivariableVisualizer } from "./MultivariableVisualizer.jsx";
 import { ExportReportModal } from "./ExportReportModal.jsx";
 import { SpeedTangentsArena } from "./SpeedTangentsArena.jsx";
-import { clientEvaluateMVT, clientCalculateRiemann } from "./clientMathEngine.js";
+import { clientEvaluateMVT, clientCalculateRiemann, clientGenerateSignal, clientSolveCopilotQuery, RANDOM_SIGNAL_PRESETS } from "./clientMathEngine.js";
 import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import { CURATED_PROBLEMS } from "./curatedProblems.js";
 
@@ -838,7 +838,7 @@ function MathKeypad({ onInsert }) {
 // ====================================================
 // SIGNALS & SYSTEMS: SIGNAL PLOT (CONTINUOUS & STEM)
 // ====================================================
-function SignalPlot({ originalSamples, transformedSamples, domain, signalType }) {
+function SignalPlot({ originalSamples, transformedSamples, domain, signalType, isAnimating }) {
   const [hoverPt, setHoverPt] = useState(null);
   const isDiscrete = domain === "discrete";
 
@@ -1241,12 +1241,13 @@ function ConvTrackSvg({ points, domain, strokeColor, fillColor, showArea = false
 // MODULE 07: SIGNAL EXPLORER COMPONENT
 // ====================================================
 function SignalExplorer() {
-  const [signalType, setSignalType] = useState("step");
+  const [signalType, setSignalType] = useState("sine");
+  const [customExpression, setCustomExpression] = useState("sin(3*t) * exp(-0.35*abs(t))");
   const [domain, setDomain] = useState("continuous");
   const [timeStart, setTimeStart] = useState("-5");
   const [timeEnd, setTimeEnd] = useState("5");
   const [amplitude, setAmplitude] = useState("1");
-  const [frequency, setFrequency] = useState("1");
+  const [frequency, setFrequency] = useState("2");
   const [phase, setPhase] = useState("0");
   const [decay, setDecay] = useState("-0.5");
   const [pulseWidth, setPulseWidth] = useState("2");
@@ -1255,43 +1256,121 @@ function SignalExplorer() {
   const [timeReversal, setTimeReversal] = useState(false);
   const [ampScale, setAmpScale] = useState("1");
 
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animPhase, setAnimPhase] = useState(0);
+
   const [signalResult, setSignalResult] = useState(null);
   const [signalLoading, setSignalLoading] = useState(false);
 
-  const generateSignal = useCallback(async () => {
-    setSignalLoading(true);
-    try {
-      const response = await fetch(`${API}/signals/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          signal_type: signalType,
-          domain: domain,
-          time_start: Number(timeStart),
-          time_end: Number(timeEnd),
-          amplitude: Number(amplitude),
-          frequency: Number(frequency),
-          phase: Number(phase),
-          decay: Number(decay),
-          pulse_width: Number(pulseWidth),
-          time_shift: Number(timeShift),
-          time_scaling: Number(timeScaling),
-          time_reversal: Boolean(timeReversal),
-          amp_scale: Number(ampScale)
-        })
-      });
-      const data = await response.json();
-      setSignalResult(data);
-    } catch {
-      setSignalResult({ error: "Signals service connection error." });
-    } finally {
-      setSignalLoading(false);
+  const generateSignal = useCallback(async (overrides = {}) => {
+    const curType = overrides.typeOverride || signalType;
+    const curExpr = overrides.exprOverride !== undefined ? overrides.exprOverride : customExpression;
+    const curDomain = overrides.domainOverride || domain;
+    const curPhase = overrides.phaseOffset !== undefined ? overrides.phaseOffset : animPhase;
+
+    // Fast client-side instant evaluation
+    const clientRes = clientGenerateSignal({
+      signalType: curType,
+      customExpression: curExpr,
+      domain: curDomain,
+      timeStart: Number(timeStart),
+      timeEnd: Number(timeEnd),
+      amplitude: Number(amplitude),
+      frequency: Number(frequency),
+      phase: Number(phase),
+      decay: Number(decay),
+      pulseWidth: Number(pulseWidth),
+      timeShift: Number(timeShift),
+      timeScaling: Number(timeScaling),
+      timeReversal: Boolean(timeReversal),
+      ampScale: Number(ampScale),
+      animPhase: curPhase
+    });
+
+    if (clientRes) {
+      setSignalResult(prev => ({
+        ...clientRes,
+        base_latex: curType === "custom" ? (curExpr || `x(${curDomain === "discrete" ? "n" : "t"})`) : (prev?.base_latex || curType),
+        transformed_latex: `y(${curDomain === "discrete" ? "n" : "t"}) = ${ampScale} \cdot x(${timeReversal ? "-" : ""}${timeScaling}(${curDomain === "discrete" ? "n" : "t"} - ${timeShift}))`,
+        energy: clientRes.energy_original
+      }));
     }
-  }, [signalType, domain, timeStart, timeEnd, amplitude, frequency, phase, decay, pulseWidth, timeShift, timeScaling, timeReversal, ampScale]);
+
+    if (!isAnimating) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const response = await fetch(`${API}/signals/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            signal_type: curType,
+            custom_expression: curExpr,
+            domain: curDomain,
+            time_start: Number(timeStart),
+            time_end: Number(timeEnd),
+            amplitude: Number(amplitude),
+            frequency: Number(frequency),
+            phase: Number(phase),
+            decay: Number(decay),
+            pulse_width: Number(pulseWidth),
+            time_shift: Number(timeShift),
+            time_scaling: Number(timeScaling),
+            time_reversal: Boolean(timeReversal),
+            amp_scale: Number(ampScale)
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.original_samples) {
+            setSignalResult(data);
+          }
+        }
+      } catch {
+        // Fallback already active
+      }
+    }
+  }, [signalType, customExpression, domain, timeStart, timeEnd, amplitude, frequency, phase, decay, pulseWidth, timeShift, timeScaling, timeReversal, ampScale, animPhase, isAnimating]);
 
   useEffect(() => {
     generateSignal();
   }, []);
+
+  // Animation loop for Oscilloscope wave traveling
+  useEffect(() => {
+    let reqId;
+    if (isAnimating) {
+      const step = () => {
+        setAnimPhase(prev => (prev + 0.08) % (2 * Math.PI * 10));
+        reqId = requestAnimationFrame(step);
+      };
+      reqId = requestAnimationFrame(step);
+    }
+    return () => {
+      if (reqId) cancelAnimationFrame(reqId);
+    };
+  }, [isAnimating]);
+
+  useEffect(() => {
+    if (isAnimating) {
+      generateSignal({ phaseOffset: animPhase });
+    }
+  }, [animPhase, isAnimating]);
+
+  const pickRandomSignal = () => {
+    const idx = Math.floor(Math.random() * RANDOM_SIGNAL_PRESETS.length);
+    const item = RANDOM_SIGNAL_PRESETS[idx];
+    setSignalType("custom");
+    setCustomExpression(item.formula);
+    if (item.domain) setDomain(item.domain);
+    generateSignal({
+      typeOverride: "custom",
+      exprOverride: item.formula,
+      domainOverride: item.domain
+    });
+  };
 
   return (
     <div className="signals-workspace">
@@ -1305,19 +1384,94 @@ function SignalExplorer() {
           </div>
         </div>
 
+        {/* Quick Action Buttons: Random Signal & Oscilloscope Animation */}
+        <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
+          <button
+            type="button"
+            className="primary-button random-btn"
+            onClick={pickRandomSignal}
+            title="Pick a random function from our 20+ preset library"
+            style={{ flex: 1, padding: "8px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+          >
+            <Sparkles size={14} />
+            <span>🎲 Random Signal</span>
+          </button>
+
+          <button
+            type="button"
+            className={`primary-button anim-toggle-btn ${isAnimating ? "active" : ""}`}
+            onClick={() => setIsAnimating(!isAnimating)}
+            title="Toggle live traveling waveform oscillation"
+            style={{ padding: "8px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+          >
+            {isAnimating ? <Pause size={14} /> : <Play size={14} />}
+            <span>{isAnimating ? "Pause" : "Animate"}</span>
+          </button>
+        </div>
+
         <div className="calculus-field">
           <label>SIGNAL FAMILY</label>
-          <select value={signalType} onChange={e => setSignalType(e.target.value)}>
-            <option value="step">Unit Step u(t) / u[n]</option>
-            <option value="impulse">Unit Impulse δ(t) / δ[n]</option>
-            <option value="ramp">Unit Ramp r(t) / r[n]</option>
-            <option value="rect">Rectangular Pulse rect(t/τ)</option>
-            <option value="sine">Sinusoid sin(ωt)</option>
-            <option value="cosine">Cos Waveform cos(ωt)</option>
-            <option value="exponential">Decaying Exponential exp(-at)</option>
-            <option value="sinc">Sinc Pulse sinc(t)</option>
+          <select value={signalType} onChange={e => {
+            const val = e.target.value;
+            setSignalType(val);
+            if (val === "custom" && !customExpression) {
+              setCustomExpression("sin(3*t) * exp(-0.35*abs(t))");
+            }
+          }}>
+            <optgroup label="Standard Singularity Signals">
+              <option value="step">Unit Step u(t) / u[n]</option>
+              <option value="impulse">Unit Impulse δ(t) / δ[n]</option>
+              <option value="ramp">Unit Ramp r(t) / r[n]</option>
+              <option value="rect">Rectangular Pulse rect(t/τ)</option>
+            </optgroup>
+            <optgroup label="Oscillations & Harmonics">
+              <option value="sine">Sinusoid sin(ωt)</option>
+              <option value="cosine">Cosine cos(ωt)</option>
+              <option value="chirp">Linear Chirp sin(0.7 t²)</option>
+              <option value="damped_sine">Damped Harmonic Oscillator</option>
+            </optgroup>
+            <optgroup label="Exponential & Pulses">
+              <option value="exponential">Decaying Exponential exp(-at)</option>
+              <option value="sinc">Sinc Pulse sinc(t)</option>
+              <option value="gaussian">Gaussian Wave Packet</option>
+            </optgroup>
+            <optgroup label="Arbitrary / User Function">
+              <option value="custom">✍️ Custom Mathematical Formula f(t)</option>
+            </optgroup>
           </select>
         </div>
+
+        {signalType === "custom" && (
+          <div className="calculus-field" style={{ animation: "fadeInUp 0.25s ease-out" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <label style={{ margin: 0 }}>FORMULA f({domain === "discrete" ? "n" : "t"})</label>
+              <span style={{ fontSize: "10px", color: "var(--accent-sage)" }}>JS / Math notation</span>
+            </div>
+            <input
+              value={customExpression}
+              onChange={e => setCustomExpression(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
+              placeholder="e.g. sin(3*t)*exp(-0.35*abs(t))"
+              style={{ fontFamily: "var(--font-mono)" }}
+            />
+            {/* Quick Chips */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
+              {["sinc(t)", "rect(t)", "step(t)", "sin(3*t)", "cos(4*t)", "exp(-0.5*abs(t))", "t^2", "1/(1+t^2)"].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="formula-chip-btn"
+                  onClick={() => {
+                    setCustomExpression(chip);
+                    generateSignal({ exprOverride: chip });
+                  }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="calculus-field">
           <label>DOMAIN</label>
@@ -1325,14 +1479,20 @@ function SignalExplorer() {
             <button
               type="button"
               className={domain === "continuous" ? "active" : ""}
-              onClick={() => setDomain("continuous")}
+              onClick={() => {
+                setDomain("continuous");
+                generateSignal({ domainOverride: "continuous" });
+              }}
             >
               Continuous (t)
             </button>
             <button
               type="button"
               className={domain === "discrete" ? "active" : ""}
-              onClick={() => setDomain("discrete")}
+              onClick={() => {
+                setDomain("discrete");
+                generateSignal({ domainOverride: "discrete" });
+              }}
             >
               Discrete [n] Stem
             </button>
@@ -1428,106 +1588,47 @@ function SignalExplorer() {
 
         <div className="bounds">
           <div>
-            <label>AMPLITUDE SCALE A</label>
+            <label>AMP SCALE (Gain)</label>
             <input
               value={ampScale}
               onChange={e => setAmpScale(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") generateSignal(); }}
             />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: "4px" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: "4px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px" }}>
               <input
                 type="checkbox"
                 checked={timeReversal}
-                onChange={e => setTimeReversal(e.target.checked)}
-                style={{ width: "16px", height: "16px", accentColor: "var(--accent-crimson)" }}
+                onChange={e => {
+                  setTimeReversal(e.target.checked);
+                  generateSignal();
+                }}
+                style={{ accentColor: "var(--accent-crimson)" }}
               />
-              <span style={{ fontSize: "12px", color: "var(--text-main)" }}>Time Reversal x(-t)</span>
+              <span>Time Reversal x(-t)</span>
             </label>
           </div>
         </div>
 
-        <button className="primary-button" onClick={generateSignal} disabled={signalLoading}>
+        <button className="primary-button calculus-run" onClick={() => generateSignal()} disabled={signalLoading}>
           <Play size={15} />
-          {signalLoading ? "Generating Waveform…" : "Generate & Transform"}
+          {signalLoading ? "Rendering Waveform…" : "Generate & Transform"}
         </button>
-
-        {/* Quick presets */}
-        <div className="presets-strip" style={{ marginTop: "14px" }}>
-          <span style={{ fontSize: "11px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Quick Presets:</span>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => {
-                setSignalType("step");
-                setTimeShift("2");
-                setTimeScaling("1");
-                setTimeReversal(false);
-              }}
-            >
-              Delayed Step u(t-2)
-            </button>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => {
-                setSignalType("rect");
-                setPulseWidth("3");
-                setTimeShift("0");
-                setTimeScaling("2");
-                setTimeReversal(false);
-              }}
-            >
-              Compressed Rect rect(2t)
-            </button>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => {
-                setSignalType("ramp");
-                setTimeShift("0");
-                setTimeScaling("1");
-                setTimeReversal(true);
-              }}
-            >
-              Reversed Ramp r(-t)
-            </button>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => {
-                setSignalType("exponential");
-                setDecay("-0.8");
-                setTimeShift("0");
-                setTimeScaling("1");
-                setTimeReversal(false);
-              }}
-            >
-              Exp Decay exp(-0.8t)
-            </button>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => {
-                setSignalType("sinc");
-                setTimeShift("0");
-                setTimeScaling("1");
-                setTimeReversal(false);
-              }}
-            >
-              Sinc Pulse sinc(t)
-            </button>
-          </div>
-        </div>
       </aside>
 
       {/* SVG Plot Center Stage */}
       <section className="visual-panel panel">
         <div className="plot-header">
           <div>
-            <span className="badge-tag">INTERACTIVE SIGNAL VISUALIZER</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span className="badge-tag">INTERACTIVE SIGNAL VISUALIZER</span>
+              {isAnimating && (
+                <span className="oscilloscope-active-badge">
+                  <Activity size={12} /> LIVE OSCILLOSCOPE ACTIVE
+                </span>
+              )}
+            </div>
             <h2>{domain === "discrete" ? "Discrete Stem Plot [n]" : "Continuous Waveform (t)"}</h2>
           </div>
           <span className="drag-note">Hover over waveform to inspect sample coordinates</span>
@@ -1538,6 +1639,7 @@ function SignalExplorer() {
           transformedSamples={signalResult?.transformed_samples}
           domain={domain}
           signalType={signalType}
+          isAnimating={isAnimating}
         />
 
         <div className="plot-foot">
@@ -1565,14 +1667,14 @@ function SignalExplorer() {
             <div className="verified-box">
               <span>BASE SIGNAL x({domain === "discrete" ? "n" : "t"})</span>
               <div style={{ marginTop: "6px" }}>
-                <MathFormula tex={signalResult.base_latex} block={true} />
+                <MathFormula tex={signalResult.base_latex || "x(t)"} block={true} />
               </div>
             </div>
 
             <div className="verified-box" style={{ borderColor: "rgba(194, 59, 96, 0.4)", background: "rgba(120, 29, 57, 0.12)" }}>
               <span style={{ color: "var(--accent-crimson)" }}>TRANSFORMED SIGNAL y({domain === "discrete" ? "n" : "t"})</span>
               <div style={{ marginTop: "6px" }}>
-                <MathFormula tex={signalResult.transformed_latex} block={true} />
+                <MathFormula tex={signalResult.transformed_latex || "y(t)"} block={true} />
               </div>
             </div>
 
@@ -1603,7 +1705,6 @@ function SignalExplorer() {
   );
 }
 
-// ====================================================
 // MODULE 08: CONVOLUTION VISUALIZER COMPONENT
 // ====================================================
 function ConvolutionVisualizer() {
@@ -4179,6 +4280,8 @@ function AICopilotView({ onNavigate, initialFormula }) {
     setLoading(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
       const res = await fetch(`${API}/ai/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4187,39 +4290,43 @@ function AICopilotView({ onNavigate, initialFormula }) {
           persona,
           level,
           active_formula: initialFormula || null
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
-      if (!res.ok) throw new Error("AI analysis service temporarily unreachable");
-      const data = await res.json();
-
-      if (data.error) throw new Error(data.error);
-
-      const aiMsg = {
-        id: Date.now() + 1,
-        sender: "ai",
-        text: data.reply,
-        steps: data.steps || [],
-        actions: data.actions || [],
-        suggested_prompts: data.suggested_prompts || []
-      };
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (err) {
-      // Offline fallback pedagogical response
-      const fallbackMsg = {
-        id: Date.now() + 1,
-        sender: "ai",
-        text: `**Notice:** AI service connecting to local analyzer. For query "${text}", you can explore direct closed-form computations in **Module 02 (Symbolic Engine)** or test mathematical proofs in **Module 09 (LTI System Analyzer)**.`,
-        actions: [
-          { label: "Open Symbolic Calculus Engine", domain: "calculus", page: "calculus" },
-          { label: "Open 3D MVT Explorer", domain: "calculus", page: "mvt" }
-        ],
-        suggested_prompts: starterPrompts.slice(0, 3)
-      };
-      setMessages(prev => [...prev, fallbackMsg]);
-    } finally {
-      setLoading(false);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.reply && !data.error) {
+          const aiMsg = {
+            id: Date.now() + 1,
+            sender: "ai",
+            text: data.reply,
+            steps: data.steps || [],
+            actions: data.actions || [],
+            suggested_prompts: data.suggested_prompts || []
+          };
+          setMessages(prev => [...prev, aiMsg]);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Fallback seamlessly to universal client mathematical reasoning engine
     }
+
+    // Universal AI Mathematical Reasoning Engine
+    const solved = clientSolveCopilotQuery(text, persona, level);
+    const aiMsg = {
+      id: Date.now() + 1,
+      sender: "ai",
+      text: solved.reply,
+      steps: solved.steps || [],
+      actions: solved.actions || [],
+      suggested_prompts: solved.suggested_prompts || []
+    };
+    setMessages(prev => [...prev, aiMsg]);
+    setLoading(false);
   };
 
   return (

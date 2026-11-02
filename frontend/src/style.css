@@ -3969,3 +3969,118 @@ footer {
     color: #111111 !important;
   }
 }
+
+
+/* ======================================================== */
+/* 22. DYNAMIC ANIMATIONS & OSCILLOSCOPE FLOW                */
+/* ======================================================== */
+
+@keyframes float-subtle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(194, 59, 96, 0.15), 0 0 0 1px rgba(194, 59, 96, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(194, 59, 96, 0.35), 0 0 0 1px rgba(194, 59, 96, 0.55);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes wave-flow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -40; }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animated panel entrance */
+.panel {
+  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Floating animated badge */
+.badge-tag, .calculus-badge {
+  animation: float-subtle 4s ease-in-out infinite;
+}
+
+/* Oscilloscope Animated Wave Glow */
+.animating-wave {
+  filter: drop-shadow(0 0 5px rgba(194, 59, 96, 0.65));
+}
+
+.oscilloscope-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(194, 59, 96, 0.2);
+  border: 1px solid rgba(194, 59, 96, 0.5);
+  color: #ff7597;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.random-btn {
+  background: linear-gradient(135deg, rgba(80, 227, 194, 0.18), rgba(138, 158, 140, 0.1));
+  border: 1px solid rgba(80, 227, 194, 0.4);
+  color: #50e3c2;
+  transition: all 0.2s ease;
+}
+
+.random-btn:hover {
+  background: linear-gradient(135deg, rgba(80, 227, 194, 0.3), rgba(138, 158, 140, 0.2));
+  border-color: #50e3c2;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(80, 227, 194, 0.25);
+}
+
+.anim-toggle-btn {
+  background: rgba(194, 59, 96, 0.15);
+  border: 1px solid rgba(194, 59, 96, 0.4);
+  color: #f5efe6;
+  transition: all 0.2s ease;
+}
+
+.anim-toggle-btn.active {
+  background: rgba(194, 59, 96, 0.35);
+  border-color: var(--accent-crimson);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(194, 59, 96, 0.4);
+}
+
+.formula-chip-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.formula-chip-btn:hover {
+  background: rgba(194, 59, 96, 0.15);
+  color: #f5efe6;
+  border-color: rgba(194, 59, 96, 0.4);
+}
